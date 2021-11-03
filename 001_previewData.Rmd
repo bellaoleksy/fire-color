@@ -1,0 +1,210 @@
+---
+title: "fire-color: preview Data"
+subtitle: "identifying post-fire color changes in lakes of the western U.S."
+author: "Bella Oleksy et al. "
+date: "Last compiled on `r format(Sys.time(), '%d %B, %Y')`"
+output:
+  bookdown::pdf_document2:
+    latex_engine: pdflatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir='..')
+knitr::opts_chunk$set(out.width = '100%',fig.height=5,
+                      echo=FALSE, 
+               warning=FALSE, message=FALSE) 
+
+```
+
+
+
+```{r some package version control stuff, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+##Hi! If you have never used renv read their little vignette here. 
+##https://rstudio.github.io/renv/articles/renv.html
+
+##If you've ever had script not work after updating R/various libraries, using
+##renv() is a nice way to avoid a lot of future headaches. -IAO
+
+if (!require('renv')) install.packages('renv');library('renv')
+
+#Create a lockfile for packages
+# renv::init()
+```
+
+
+```{r Load necessary packages, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+library('here')
+
+##enable easy file referencing in project-oriented workflows.
+##https://rstats.wtf/project-oriented-workflow.html
+## ^ ^ a little more on that
+
+source("fire-color/scripts/00_libraries.R")
+```
+
+
+```{r Load LAGOS IDs dataframe, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+source("fire-color/scripts/01.0_pullLakeIDsLAGOS.R")
+source("fire-color/scripts/01.1_pullLakeCat.R")
+#Currently only pulling out MTBS, FirePerimeters, and ForestLoss, but all the other data is in that R file and commented out for speed. 
+
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#Describes proportion of catchment / watershed within burn perimeters
+#But I think I'm missing the burn severity numbers 
+MTBS_long <- lakeCat %>%
+  dplyr::select(nhdplusv2_comid, contains("MTBS"))%>%
+  pivot_longer(-(1), names_pattern = "(\\d+)([A-Za-z]+)", names_to = c("year","scale"))
+    # "([A-Za-z]+)" matches only letters, so will pull out just "Ws" or "Cat". "(\\d+)" matches digits and will pull out the year.
+  
+names(MTBS_long)
+```
+
+# MTBS
+## Histograms of % area burned by Ws and Cat scales
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', out.height='60%'}
+MTBS_long %>%
+  filter(value>0)%>%
+  filter(scale=="Ws") %>%
+  mutate(year=as.numeric(year))%>%
+  ggplot(aes(value, group=year)) +
+  geom_histogram(aes(fill=year)) +  # scale histogram y
+  # geom_density(aes(color=year), alpha=0.4) +
+  facet_wrap(~year, scales="free") +
+  scale_fill_continuous_sequential(palette="ag_Sunset")+
+  scale_color_continuous_sequential(palette="ag_Sunset")+
+  ggtitle("MTBS % area burned - Ws scale")
+
+
+MTBS_long %>%
+  filter(value>0)%>%
+  filter(scale=="Cat") %>%
+  mutate(year=as.numeric(year))%>%
+  ggplot(aes(value, group=year)) +
+  geom_histogram(aes(fill=year)) +  # scale histogram y
+  # geom_density(aes(color=year), alpha=0.4) +
+  facet_wrap(~year, scales="free") +
+  scale_fill_continuous_sequential(palette="ag_Sunset")+
+  scale_color_continuous_sequential(palette="ag_Sunset")+
+  ggtitle("MTBS % area burned - Cat scale (local)")
+```
+
+In every year there are always a number of lakes that burn severly (>90% of the total area of every local catchment. If you look at the full watershed (Ws) scale there are a lot more lakes on the low end (<20%).
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', out.height='60%'}
+
+#Number of lakes that experienced forest loss due to fire within local catchment
+MTBS_summary<- left_join(MTBS_long%>%
+  filter(value>0)%>%
+  filter(scale=="Cat") %>%
+  group_by(year) %>%
+  summarize(n_lakes_Cat=length(unique(nhdplusv2_comid))) ,
+
+#Number of lakes that experienced forest loss due to fire 2000-2010 within larger watershed
+MTBS_long%>%
+  filter(value>0)%>%
+  filter(scale=="Ws") %>%
+  group_by(year) %>%
+  summarize(n_lakes_Ws=length(unique(nhdplusv2_comid))) ,
+
+by="year")
+
+
+knitr::kable(MTBS_summary, "simple", caption="Table summarizing the number of lakes with any percentage burn (>0) at the local catchment (Cat) and full watershed (Ws) scale, by year")
+```
+
+Looks promising, we have hundreds of lakes lakes that were close to forests fires in every year and the numbers fluctuate quite a bit year-to-year.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '50%', out.height='60%'}
+MTBS_summary %>%
+  pivot_longer(-1)%>%
+  ggplot(aes(x=year,y=value, fill=name, color=name, group=name))+
+  geom_line()+
+  geom_point(shape=21, size=2.5)+
+  scale_color_manual(values=c("#90a955","#31572c"),
+                    labels=c("Catchment","Watershed"),
+                    name="Legend")+
+  scale_fill_manual(values=c("#90a955","#31572c"),
+                    labels=c("Catchment","Watershed"),
+                    name="Legend")+
+  labs(x="Year",
+       y="Number of lakes in burned watersheds/local catchments")+
+  theme(axis.text.x=element_text(angle = 45, hjust = 1, size=8))
+
+```
+
+<!-- #Does the number of small fires look like it's increasing? -->
+<!-- MTBS_long %>% -->
+<!--   filter(value>0 & value<20)%>% -->
+<!--   filter(scale=="Cat") %>% -->
+<!--   mutate(year=as.numeric(year))%>% -->
+<!--   ggplot(aes(value, group=year)) + -->
+<!--   scale_color_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   geom_density(aes(color=year)) + -->
+<!--   # facet_wrap(~year) + -->
+<!--   ggtitle("MTBS % area burned - Cat scale (local)")+ -->
+<!--   theme_dark() -->
+
+
+<!-- #Does the number of moderate fires look like it's increasing? -->
+<!-- MTBS_long %>% -->
+<!--   filter(value>20 & value<80)%>% -->
+<!--   filter(scale=="Cat") %>% -->
+<!--   mutate(year=as.numeric(year))%>% -->
+<!--   ggplot(aes(value, group=year)) + -->
+<!--   scale_color_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   geom_density(aes(color=year)) + -->
+<!--   # facet_wrap(~year) + -->
+<!--   ggtitle("MTBS % area burned - Cat scale (local)")+ -->
+<!--   theme_dark() -->
+
+
+
+<!-- names(FirePerimeters) -->
+
+<!-- FirePeriments_long<- FirePerimeters %>% -->
+<!--       pivot_longer(-(1:6), names_pattern = "([A-Za-z]+)(\\d+)([A-Za-z]+)", names_to = c("units","year","scale")) -->
+
+<!-- FirePeriments_long %>% -->
+<!--   filter(value>0 & value <25)%>% -->
+<!--   filter(scale=="Ws") %>% -->
+<!--   ggplot(aes(value)) + -->
+<!--   geom_histogram() + -->
+<!--   facet_wrap(~year, scales="free") + -->
+<!--   ggtitle("% Forest loss to fire - Ws scale") -->
+
+<!-- FirePeriments_long %>% -->
+<!--   filter(value>0 & value <25)%>% -->
+<!--   filter(scale=="Cat") %>% -->
+<!--   ggplot(aes(value)) + -->
+<!--   geom_histogram() + -->
+<!--   facet_wrap(~year, scales="free") + -->
+<!--   ggtitle("% Forest loss to fire - local Cat scale") -->
+
+
+
+<!-- #Number of lakes that experienced forest loss due to fire 2000-2010 within local catchment -->
+<!-- FirePeriments_long%>% -->
+<!--   filter(value>0)%>% -->
+<!--   filter(scale=="Cat") %>% -->
+<!--   group_by(year) %>% -->
+<!--   summarize(n_lakes=length(unique(nhdplusv2_comid))) -->
+
+
+<!-- #Number of lakes that experienced forest loss due to fire 2000-2010 within larger watershed -->
+<!-- FirePeriments_long%>% -->
+<!--   filter(value>0)%>% -->
+<!--   filter(scale=="Ws") %>% -->
+<!--   group_by(year) %>% -->
+<!--   summarize(n_lakes=length(unique(nhdplusv2_comid))) -->
+
+
+
+<!-- ``` -->
+
+<!-- Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot. -->
