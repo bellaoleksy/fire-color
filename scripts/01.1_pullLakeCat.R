@@ -3,7 +3,8 @@
 MTBS<-read.csv("~/Dropbox/dropbox Research/fire-color/data/lakeCat/MTBS.csv") %>%
   rename(nhdplusv2_comid=COMID)%>%
   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-MTBS<-semi_join(MTBS,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
+MTBS<-semi_join(MTBS,lakeIDs,by="nhdplusv2_comid")
+
 
 # MTBS_Severity_1984<-read.csv(here("data/lakeCat/MTBS_Severity_1984.csv")) %>%
 #   rename(nhdplusv2_comid=COMID)%>%
@@ -152,7 +153,7 @@ ForestLoss<-semi_join(ForestLoss,lakeIDs,by="nhdplusv2_comid")# All rows in a th
 #   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
 # Census<-semi_join(Census,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
 
-
+colnames<-(intersect( colnames(FirePerimeters),  colnames(MTBS))) #identify common columns between data.tables
 lakeCat<- left_join(FirePerimeters, MTBS, by=colnames)
 lakeCat<- left_join(lakeCat, ForestLoss, by=colnames)
 # lakeCat<- left_join(lakeCat, AgN, by=colnames)
@@ -171,7 +172,7 @@ lakeCat<- left_join(lakeCat, ForestLoss, by=colnames)
 # lakeCat<- left_join(lakeCat, Census, by=colnames)
 
 #Clean up 
-# rm(FirePerimeters, MTBS, ForestLoss
+rm(FirePerimeters, MTBS, ForestLoss
 #    # AgN, NLCD, 
 #    # Runoff, 
 #    # NADP, PRISM_1981_2010, 
@@ -182,4 +183,5 @@ lakeCat<- left_join(lakeCat, ForestLoss, by=colnames)
 #    # Census,
 #    # GeoChemPhys1,GeoChemPhys2,GeoChemPhys3,GeoChemPhys4,
 #    # NLCD2001, NLCD2004, NLCD2006, NLCD2008, NLCD2011, NLCD2013, NLCD2016
-#    )
+   )
+
