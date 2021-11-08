@@ -3,7 +3,8 @@
 MTBS<-read.csv("~/Dropbox/dropbox Research/fire-color/data/lakeCat/MTBS.csv") %>%
   rename(nhdplusv2_comid=COMID)%>%
   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-MTBS<-semi_join(MTBS,lakeIDs,by="nhdplusv2_comid")
+# MTBS<-semi_join(MTBS,lakeIDs,by="nhdplusv2_comid")
+MTBS<-inner_join(MTBS,lakeIDs,by="nhdplusv2_comid")
 
 
 # MTBS_Severity_1984<-read.csv(here("data/lakeCat/MTBS_Severity_1984.csv")) %>%
@@ -15,13 +16,16 @@ MTBS<-semi_join(MTBS,lakeIDs,by="nhdplusv2_comid")
 FirePerimeters<-read.csv("~/Dropbox/dropbox Research/fire-color/data/lakeCat/FirePerimeters.csv") %>%
   rename(nhdplusv2_comid=COMID)%>%
   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-FirePerimeters<-semi_join(FirePerimeters,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
+# FirePerimeters<-semi_join(FirePerimeters,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
+FirePerimeters<-inner_join(FirePerimeters,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
 
 #Forest loss
 ForestLoss<-read.csv("~/Dropbox/dropbox Research/fire-color/data/lakeCat/ForestLossByYear0013.csv") %>%
   rename(nhdplusv2_comid=COMID)%>%
   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-ForestLoss<-semi_join(ForestLoss,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
+# ForestLoss<-semi_join(ForestLoss,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
+ForestLoss<-inner_join(ForestLoss,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
+
 
 # #Ag Nitrogen
 # AgN <-read.csv(here("data/lakeCat/AgriculturalNitrogen.csv")) %>%
