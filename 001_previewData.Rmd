@@ -12,7 +12,7 @@ output:
 knitr::opts_chunk$set(warning = FALSE)
 knitr::opts_chunk$set(echo = FALSE)
 knitr::opts_knit$set(root.dir='..')
-knitr::opts_chunk$set(out.width = '100%',fig.height=5,
+knitr::opts_chunk$set(out.width = '100%',fig.height=8,
                       echo=FALSE, 
                warning=FALSE, message=FALSE) 
 
@@ -42,6 +42,9 @@ library('here')
 ## ^ ^ a little more on that
 
 source("fire-color/scripts/00_libraries.R")
+
+
+
 ```
 
 
@@ -57,8 +60,8 @@ source("fire-color/scripts/01.1_pullLakeCat.R")
 #Describes proportion of catchment / watershed within burn perimeters
 #But I think I'm missing the burn severity numbers 
 MTBS_long <- lakeCat %>%
-  dplyr::select(nhdplusv2_comid, contains("MTBS"))%>%
-  pivot_longer(-(1), names_pattern = "(\\d+)([A-Za-z]+)", names_to = c("year","scale"))
+  dplyr::select(nhdplusv2_comid, lake_lon_decdeg, lake_lat_decdeg, contains("MTBS"))%>%
+  pivot_longer(-(1:3), names_pattern = "(\\d+)([A-Za-z]+)", names_to = c("year","scale"))
     # "([A-Za-z]+)" matches only letters, so will pull out just "Ws" or "Cat". "(\\d+)" matches digits and will pull out the year.
   
 names(MTBS_long)
@@ -67,9 +70,9 @@ names(MTBS_long)
 # MTBS
 ## Histograms of % area burned by Ws and Cat scales
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', out.height='60%'}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', fig.height=8}
 MTBS_long %>%
-  filter(value>0)%>%
+  filter(value>1)%>%
   filter(scale=="Ws") %>%
   mutate(year=as.numeric(year))%>%
   ggplot(aes(value, group=year)) +
@@ -78,11 +81,13 @@ MTBS_long %>%
   facet_wrap(~year, scales="free") +
   scale_fill_continuous_sequential(palette="ag_Sunset")+
   scale_color_continuous_sequential(palette="ag_Sunset")+
-  ggtitle("MTBS % area burned - Ws scale")
-
-
+  ggtitle("MTBS % area burned - Ws scale")+
+  ggpubr::theme_pubr(base_size=8)
+```
+\newpage
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', fig.height=8}
 MTBS_long %>%
-  filter(value>0)%>%
+  filter(value>1)%>%
   filter(scale=="Cat") %>%
   mutate(year=as.numeric(year))%>%
   ggplot(aes(value, group=year)) +
@@ -91,23 +96,24 @@ MTBS_long %>%
   facet_wrap(~year, scales="free") +
   scale_fill_continuous_sequential(palette="ag_Sunset")+
   scale_color_continuous_sequential(palette="ag_Sunset")+
-  ggtitle("MTBS % area burned - Cat scale (local)")
+  ggtitle("MTBS % area burned - Cat scale (local)") +
+  ggpubr::theme_pubr(base_size=8)
 ```
 
 In every year there are always a number of lakes that burn severly (>90% of the total area of every local catchment. If you look at the full watershed (Ws) scale there are a lot more lakes on the low end (<20%).
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', out.height='60%'}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', fig.height=8}
 
 #Number of lakes that experienced forest loss due to fire within local catchment
 MTBS_summary<- left_join(MTBS_long%>%
-  filter(value>0)%>%
+  filter(value>1)%>%
   filter(scale=="Cat") %>%
   group_by(year) %>%
   summarize(n_lakes_Cat=length(unique(nhdplusv2_comid))) ,
 
 #Number of lakes that experienced forest loss due to fire 2000-2010 within larger watershed
 MTBS_long%>%
-  filter(value>0)%>%
+  filter(value>1)%>%
   filter(scale=="Ws") %>%
   group_by(year) %>%
   summarize(n_lakes_Ws=length(unique(nhdplusv2_comid))) ,
@@ -115,12 +121,12 @@ MTBS_long%>%
 by="year")
 
 
-knitr::kable(MTBS_summary, "simple", caption="Table summarizing the number of lakes with any percentage burn (>0) at the local catchment (Cat) and full watershed (Ws) scale, by year")
+knitr::kable(MTBS_summary, "simple", caption="Table summarizing the number of lakes with any percentage burn (>1%) at the local catchment (Cat) and full watershed (Ws) scale, by year")
 ```
 
 Looks promising, we have hundreds of lakes lakes that were close to forests fires in every year and the numbers fluctuate quite a bit year-to-year.
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '50%', out.height='60%'}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', out.height='100%'}
 MTBS_summary %>%
   pivot_longer(-1)%>%
   ggplot(aes(x=year,y=value, fill=name, color=name, group=name))+
@@ -133,8 +139,87 @@ MTBS_summary %>%
                     labels=c("Catchment","Watershed"),
                     name="Legend")+
   labs(x="Year",
-       y="Number of lakes in burned watersheds/local catchments")+
+       y="n lakes",
+       title="Number of lakes in burned watersheds/local catchments")+
+  ggpubr::theme_pubr(base_size=8)+
   theme(axis.text.x=element_text(angle = 45, hjust = 1, size=8))
+
+
+```
+
+Looks like there is a step-change increase in the number of lakes in burned watersheds in the early 2000s, though no breakpoint detected using segmented regerssion. 
+
+```{r, include=TRUE, error=FALSE}
+# -------------------
+# analyse breakpoints
+# -------------------
+# http://cran.r-project.org/doc/Rnews/Rnews_2008-1.pdf
+if (!require('segmented')) install.packages('segmented');library('segmented')
+
+MTBS_summary2<- MTBS_summary %>%
+  mutate(year=as.numeric(as.character(year)))
+
+# create a linear model
+my.lm <- lm(n_lakes_Cat ~ year, data = MTBS_summary2)
+summary(my.lm)
+
+# # have to provide estimates for breakpoints.
+# # after looking a the data, 
+# my.seg <- segmented(my.lm, 
+#                     seg.Z = ~ year, 
+#                     psi = NA)
+# 
+# # When not providing estimates for the breakpoints "psi = NA" can be used.
+# # The number of breakpoints that will show up is not defined
+# #my.seg <- segmented(my.lm, 
+# #                    seg.Z = ~ DistanceMeters, 
+# #                    psi = NA)
+# 
+# # display the summary
+# summary(my.seg)
+
+```
+\newpage
+## Water color proof of concept
+
+How many lakes do we have where the local catchment burned >90%? We think that is where we are most likely to see a color response if there is one. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', fig.height=5}
+
+#Number of lakes that experienced forest loss due to fire within local catchment
+MTBS_summary_severe<- MTBS_long%>%
+  filter(value>90)%>%
+  filter(scale=="Cat") %>%
+  group_by(year) %>%
+  summarize(n_lakes_Cat=length(unique(nhdplusv2_comid)))
+
+
+knitr::kable(MTBS_summary_severe, "simple", caption="Table summarizing the number of lakes with any percentage burn (>90%) at the local catchment (Cat) and full watershed (Ws) scale, by year")
+```
+
+We have a total of `r MTBS_summary_severe %>% summarize(n_lakes=sum(n_lakes_Cat)) %>% pull()` lakes to check out. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', out.height='100%'}
+MTBS_summary_severe %>%
+  ggplot(aes(x=year,y=n_lakes_Cat, group=NA))+
+    geom_line()+
+  geom_point(shape=21, size=2.5, fill="#90a955")+
+  labs(x="Year",
+       y="n lakes",
+       title="Number of lakes where >90% of the local catchment burned")+
+  ggpubr::theme_pubr(base_size=12)+
+  theme(axis.text.x=element_text(angle = 45, hjust = 1, size=8))
+
+
+```
+
+## Write .csv file with comids for all lakes with fires
+```{r, echo=TRUE, message=FALSE, warning=FALSE, include=FALSE}
+
+# MTBS_export<-MTBS_long %>%
+#   filter(value>0)%>%
+#   dplyr::select(nhdplusv2_comid, lake_lon_decdeg, lake_lat_decdeg)
+# write_csv(MTBS_export, "data_export/MTBS_burnedLakes.csv")
 
 ```
 
