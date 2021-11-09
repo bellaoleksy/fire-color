@@ -264,7 +264,7 @@ I'd like to use these maps to understand a few spatiotemporal patterns
 
 ### Maps - changes through time
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', fig.height=5}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
 
 ggplot()+
     geom_sf(data = us,color = "black")+
@@ -290,7 +290,7 @@ ggplot()+
 
 In the graph above, each point represents a lake where >1% of the local catchment burned. Right away you can see some clustering. For example, the 1988 Yellowstone fire complex shows up pretty vividly in the northwestern corner of Wyoming. There appears to be a lot more redish/purple hues in California where we know wildfires have been increasing. 
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width = '100%', fig.height=5}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
 
 ggplot()+
     geom_sf(data = us,color = "black")+
@@ -315,7 +315,7 @@ ggplot()+
 
 If you zoom in on just california you can see that there is a large group of lakes in northern California that bruned in the late 2010s. There is another group of lakes in southern California that burned about 10 years earlier. Will be interesting to see the burn severity on those sites, and look at their recovery trajectory. 
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width = '100%', fig.height=5}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
 
 ggplot()+
     geom_sf(data = us,color = "black")+
@@ -342,7 +342,7 @@ Looking at Idaho, it appears that there are more fires in recent years though yo
 
 ### Maps -- spatial structure of burn severity
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=6.5, fig.height=5}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
 ggplot()+
     geom_sf(data = us,color = "black")+
       geom_polygon(data=states, aes(x=long, y=lat, group=group),
@@ -376,7 +376,7 @@ ggplot()+
 \newpage
 What if we only look at the most severe burns? Where are those sites?
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=6.5, fig.height=5}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
 ggplot()+
     geom_sf(data = us,color = "black")+
       geom_polygon(data=states, aes(x=long, y=lat, group=group),
@@ -401,14 +401,12 @@ ggplot()+
   ggpubr::theme_pubr(base_size=12)+
   theme(axis.title=element_blank())+
     scale_fill_manual(values=c("#e76f51"),
-                    name="Burn severity (% area)")+
-  labs(title="Lakes that burned in the western US",
-       subtitle="")
+                    name="Burn severity (% area)")
 ```
 
 Wow! Loads of lakes all over. Way more than I anticipated in Idaho. What if we look at all the lakes where >80% of the watershed burned... WHEN did those burns occur?
 \newpage
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=6.5, fig.height=5}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
 
 ggplot()+
     geom_sf(data = us,color = "black")+
@@ -441,7 +439,7 @@ ggplot()+
 
 ```
 
-
+\newpage
 # Water color proof of concept
 
 How many lakes do we have where the local catchment burned >90%? We think that is where we are most likely to see a color response if there is one. 
@@ -492,12 +490,12 @@ HydroLakes_DP_comids <- read.csv("~/Dropbox/dropbox Research/fire-color/data/hyd
   mutate(nhdplusv2_comid=factor(nhdplusv2_comid))
 
 #Read in HydroLakes color stuff
-satColor <- read_csv("~/Dropbox/dropbox Research/fire-color/data/hydroLakes/srCorrected_us_hydrolakes_dp_20200628.csv") 
+# satColor <- read_csv("~/Dropbox/dropbox Research/fire-color/data/hydroLakes/srCorrected_us_hydrolakes_dp_20200628.csv") 
   # rename(nhdplusv2_comid=comid) %>%
   # mutate(nhdplusv2_comid=factor(nhdplusv2_comid))
 
 #Join to MTBS_long
-test<-full_join(MTBS_long,HydroLakes_DP_comids,by="nhdplusv2_comid")
+# test<-full_join(MTBS_long,HydroLakes_DP_comids,by="nhdplusv2_comid")
 
 ```
 
