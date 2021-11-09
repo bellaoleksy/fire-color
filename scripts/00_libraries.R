@@ -5,6 +5,8 @@
 # "ggspatial", "libwgeom", "sf", "rnaturalearth", "rnaturalearthdata"))
 if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
 if (!require('colorspace')) install.packages('colorspace'); library('colorspace')#Borrowed some code from their minimum working example: 
+if (!require('formatR')) install.packages('formatR'); library('formatR')
+
 
 library(tidyverse)
 library(lubridate)
@@ -31,6 +33,7 @@ if (!require('raster')) install.packages('raster'); library(raster)
 if (!require('tidytext')) install.packages('tidytext'); library(tidytext)
 if (!require('nhdplusTools')) install.packages('nhdplusTools'); library('nhdplusTools')
 if (!require('maps')) install.packages('maps'); library('maps')
+if (!require('rgeos')) install.packages('rgeos'); library('rgeos')
 
 if (!require('ggfortify')) install.packages('ggfortify'); library('ggfortify')
 if (!require('cluster')) install.packages('cluster'); library('cluster')
