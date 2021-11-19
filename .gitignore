@@ -47,9 +47,6 @@ vignettes/*.pdf
 #Exclude rsconnect
 /rsconnect
 
-#Exclude screenshots folder
-/screenshots
-
 #Produced htmls from .Rmd docs
 # produced vignettes
 *.html
