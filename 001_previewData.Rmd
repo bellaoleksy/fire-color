@@ -250,199 +250,199 @@ knitr::kable(BurnClassLMs, "simple", caption="Table summarizing the linear model
 
 The number of fires in every size class has been increasing through time with the exception of > 80% burn at the local catchment and full watershed scales. The strongest trend is at the local catchment scale with burned severity of 60-80% and 40-60%, though the total number of lakes affected is still relatively low.
 
-## Burn severity maps
-```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-rivers50 <- ne_download(scale = "large", type = 'rivers_lake_centerlines', category = 'physical', returnclass = "sf")
-# sp::plot(rivers50)
-us <- ne_countries(scale = "medium", country="united states of america",returnclass = "sf")
+<!-- ## Burn severity maps -->
+<!-- ```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE} -->
+<!-- rivers50 <- ne_download(scale = "large", type = 'rivers_lake_centerlines', category = 'physical', returnclass = "sf") -->
+<!-- # sp::plot(rivers50) -->
+<!-- us <- ne_countries(scale = "medium", country="united states of america",returnclass = "sf") -->
 
-states<-(map_data("state", boundary = FALSE, interior = TRUE))
-```
+<!-- states<-(map_data("state", boundary = FALSE, interior = TRUE)) -->
+<!-- ``` -->
 
-I'd like to use these maps to understand a few spatiotemporal patterns
+<!-- I'd like to use these maps to understand a few spatiotemporal patterns -->
 
-- Can we see how the location of fires has changed over time?
-- Where have the most severe burns taken places?
-- Which areas have the most small fires? large fires? medium fires?
+<!-- - Can we see how the location of fires has changed over time? -->
+<!-- - Where have the most severe burns taken places? -->
+<!-- - Which areas have the most small fires? large fires? medium fires? -->
 
-### Maps - changes through time
+<!-- ### Maps - changes through time -->
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
+<!-- ```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7} -->
 
-ggplot()+
-    geom_sf(data = us,color = "black")+
-      geom_polygon(data=states, aes(x=long, y=lat, group=group),
-               fill=NA, color="black",
-               linetype="dashed")+
-    geom_sf(data=rivers50, color="lightblue")+
-    annotation_scale(location = "bl", width_hint = 0.5) +
-    coord_sf(xlim = c(-125, -103), ylim = c(32, 49), expand=TRUE)+
-  geom_jitter(data=MTBS_long %>%
-                    filter(value>1)%>%
-                    filter(scale=="Cat") %>%
-                    mutate(year=as.numeric(year)),
-             aes(lake_lon_decdeg, lake_lat_decdeg, fill=year),
-             shape=21, size=1.5)+
-  ggpubr::theme_pubr(base_size=12)+
-  theme(axis.title=element_blank())+
-  scale_fill_continuous_sequential(palette="ag_Sunset")+
-  scale_color_continuous_sequential(palette="ag_Sunset")+
-  labs(title="Every fire in the western U.S. 1984-2018",
-       subtitle="")
-```
+<!-- ggplot()+ -->
+<!--     geom_sf(data = us,color = "black")+ -->
+<!--       geom_polygon(data=states, aes(x=long, y=lat, group=group), -->
+<!--                fill=NA, color="black", -->
+<!--                linetype="dashed")+ -->
+<!--     geom_sf(data=rivers50, color="lightblue")+ -->
+<!--     annotation_scale(location = "bl", width_hint = 0.5) + -->
+<!--     coord_sf(xlim = c(-125, -103), ylim = c(32, 49), expand=TRUE)+ -->
+<!--   geom_jitter(data=MTBS_long %>% -->
+<!--                     filter(value>1)%>% -->
+<!--                     filter(scale=="Cat") %>% -->
+<!--                     mutate(year=as.numeric(year)), -->
+<!--              aes(lake_lon_decdeg, lake_lat_decdeg, fill=year), -->
+<!--              shape=21, size=1.5)+ -->
+<!--   ggpubr::theme_pubr(base_size=12)+ -->
+<!--   theme(axis.title=element_blank())+ -->
+<!--   scale_fill_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   scale_color_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   labs(title="Every fire in the western U.S. 1984-2018", -->
+<!--        subtitle="") -->
+<!-- ``` -->
 
-In the graph above, each point represents a lake where >1% of the local catchment burned. Right away you can see some clustering. For example, the 1988 Yellowstone fire complex shows up pretty vividly in the northwestern corner of Wyoming. There appears to be a lot more redish/purple hues in California where we know wildfires have been increasing. 
+<!-- In the graph above, each point represents a lake where >1% of the local catchment burned. Right away you can see some clustering. For example, the 1988 Yellowstone fire complex shows up pretty vividly in the northwestern corner of Wyoming. There appears to be a lot more redish/purple hues in California where we know wildfires have been increasing.  -->
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
+<!-- ```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7} -->
 
-ggplot()+
-    geom_sf(data = us,color = "black")+
-      geom_polygon(data=states, aes(x=long, y=lat, group=group),
-               fill=NA, color="black",
-               linetype="dashed")+
-    geom_sf(data=rivers50, color="lightblue")+
-    # annotation_scale(location = "bl", width_hint = 0.5) +
-    coord_sf(xlim = c(-125, -114), ylim = c(32, 42), expand=TRUE)+
-  geom_jitter(data=MTBS_long %>%
-                    filter(value>1)%>%
-                    filter(scale=="Cat") %>%
-                    mutate(year=as.numeric(year)),
-             aes(lake_lon_decdeg, lake_lat_decdeg, fill=year),
-             shape=21, size=2.5, alpha=0.8)+
-  ggpubr::theme_pubr(base_size=12)+
-  theme(axis.title=element_blank())+
-  scale_fill_continuous_sequential(palette="ag_Sunset")+
-  scale_color_continuous_sequential(palette="ag_Sunset")+
-  labs(title="Every fire in California 1984-2018")
-```
+<!-- ggplot()+ -->
+<!--     geom_sf(data = us,color = "black")+ -->
+<!--       geom_polygon(data=states, aes(x=long, y=lat, group=group), -->
+<!--                fill=NA, color="black", -->
+<!--                linetype="dashed")+ -->
+<!--     geom_sf(data=rivers50, color="lightblue")+ -->
+<!--     # annotation_scale(location = "bl", width_hint = 0.5) + -->
+<!--     coord_sf(xlim = c(-125, -114), ylim = c(32, 42), expand=TRUE)+ -->
+<!--   geom_jitter(data=MTBS_long %>% -->
+<!--                     filter(value>1)%>% -->
+<!--                     filter(scale=="Cat") %>% -->
+<!--                     mutate(year=as.numeric(year)), -->
+<!--              aes(lake_lon_decdeg, lake_lat_decdeg, fill=year), -->
+<!--              shape=21, size=2.5, alpha=0.8)+ -->
+<!--   ggpubr::theme_pubr(base_size=12)+ -->
+<!--   theme(axis.title=element_blank())+ -->
+<!--   scale_fill_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   scale_color_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   labs(title="Every fire in California 1984-2018") -->
+<!-- ``` -->
 
-If you zoom in on just california you can see that there is a large group of lakes in northern California that bruned in the late 2010s. There is another group of lakes in southern California that burned about 10 years earlier. Will be interesting to see the burn severity on those sites, and look at their recovery trajectory. 
+<!-- If you zoom in on just california you can see that there is a large group of lakes in northern California that bruned in the late 2010s. There is another group of lakes in southern California that burned about 10 years earlier. Will be interesting to see the burn severity on those sites, and look at their recovery trajectory.  -->
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
+<!-- ```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7} -->
 
-ggplot()+
-    geom_sf(data = us,color = "black")+
-      geom_polygon(data=states, aes(x=long, y=lat, group=group),
-               fill=NA, color="black",
-               linetype="dashed")+
-    geom_sf(data=rivers50, color="lightblue")+
-    # annotation_scale(location = "bl", width_hint = 0.5) +
-    coord_sf(xlim = c(-117, -110), ylim = c(42, 49), expand=TRUE)+
-  geom_jitter(data=MTBS_long %>%
-                    filter(value>1)%>%
-                    filter(scale=="Cat") %>%
-                    mutate(year=as.numeric(year)),
-             aes(lake_lon_decdeg, lake_lat_decdeg, fill=year),
-             shape=21, size=2.5, alpha=0.8)+
-  ggpubr::theme_pubr(base_size=12)+
-  theme(axis.title=element_blank())+
-  scale_fill_continuous_sequential(palette="ag_Sunset")+
-  scale_color_continuous_sequential(palette="ag_Sunset")+
-  labs(title="Every fire in Idaho 1984-2018")
-```
+<!-- ggplot()+ -->
+<!--     geom_sf(data = us,color = "black")+ -->
+<!--       geom_polygon(data=states, aes(x=long, y=lat, group=group), -->
+<!--                fill=NA, color="black", -->
+<!--                linetype="dashed")+ -->
+<!--     geom_sf(data=rivers50, color="lightblue")+ -->
+<!--     # annotation_scale(location = "bl", width_hint = 0.5) + -->
+<!--     coord_sf(xlim = c(-117, -110), ylim = c(42, 49), expand=TRUE)+ -->
+<!--   geom_jitter(data=MTBS_long %>% -->
+<!--                     filter(value>1)%>% -->
+<!--                     filter(scale=="Cat") %>% -->
+<!--                     mutate(year=as.numeric(year)), -->
+<!--              aes(lake_lon_decdeg, lake_lat_decdeg, fill=year), -->
+<!--              shape=21, size=2.5, alpha=0.8)+ -->
+<!--   ggpubr::theme_pubr(base_size=12)+ -->
+<!--   theme(axis.title=element_blank())+ -->
+<!--   scale_fill_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   scale_color_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   labs(title="Every fire in Idaho 1984-2018") -->
+<!-- ``` -->
 
-Looking at Idaho, it appears that there are more fires in recent years though you do see a handfull of sites from the 90s scattered about. 
+<!-- Looking at Idaho, it appears that there are more fires in recent years though you do see a handfull of sites from the 90s scattered about.  -->
 
-### Maps -- spatial structure of burn severity
+<!-- ### Maps -- spatial structure of burn severity -->
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
-ggplot()+
-    geom_sf(data = us,color = "black")+
-      geom_polygon(data=states, aes(x=long, y=lat, group=group),
-               fill=NA, color="black",
-               linetype="dashed")+
-    geom_sf(data=rivers50, color="lightblue")+
-    annotation_scale(location = "bl", width_hint = 0.5) +
-    coord_sf(xlim = c(-125, -103), ylim = c(32, 49), expand=TRUE)+
-  geom_jitter(data=MTBS_long %>%
-                      filter(value>1)%>%
-                      group_by(scale)%>%
-                      mutate(burnSeverityClass=
-                              ifelse(value >1 & value <=20, "< 20%", 
-                                     ifelse(value >20 & value <=40, "20-40%", 
-                                            ifelse(value >40 & value <=60, "40-60%", 
-                                                   ifelse(value >60 & value <=80, "60-80%",
-                                                          ifelse(value >80 , "> 80%", "error")))))) %>%
-                      mutate(burnSeverityClass = factor(burnSeverityClass,
-                                                levels = c("< 20%", "20-40%", "40-60%",
-                                                           "60-80%", "> 80%"))) %>% #Reorder factors for plotting
-                      filter(scale=="Cat"),
-             aes(lake_lon_decdeg, lake_lat_decdeg, fill=burnSeverityClass),
-             shape=21, size=1.5)+
-  ggpubr::theme_pubr(base_size=12)+
-  theme(axis.title=element_blank())+
-    scale_fill_manual(values=c("#264653","#2a9d8f","#e9c46a","#f4a261","#e76f51"),
-                    name="Burn severity (% area)")+
-  labs(title="Lakes that burned in the western US",
-       subtitle="")
-```
-\newpage
-What if we only look at the most severe burns? Where are those sites?
+<!-- ```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7} -->
+<!-- ggplot()+ -->
+<!--     geom_sf(data = us,color = "black")+ -->
+<!--       geom_polygon(data=states, aes(x=long, y=lat, group=group), -->
+<!--                fill=NA, color="black", -->
+<!--                linetype="dashed")+ -->
+<!--     geom_sf(data=rivers50, color="lightblue")+ -->
+<!--     annotation_scale(location = "bl", width_hint = 0.5) + -->
+<!--     coord_sf(xlim = c(-125, -103), ylim = c(32, 49), expand=TRUE)+ -->
+<!--   geom_jitter(data=MTBS_long %>% -->
+<!--                       filter(value>1)%>% -->
+<!--                       group_by(scale)%>% -->
+<!--                       mutate(burnSeverityClass= -->
+<!--                               ifelse(value >1 & value <=20, "< 20%",  -->
+<!--                                      ifelse(value >20 & value <=40, "20-40%",  -->
+<!--                                             ifelse(value >40 & value <=60, "40-60%",  -->
+<!--                                                    ifelse(value >60 & value <=80, "60-80%", -->
+<!--                                                           ifelse(value >80 , "> 80%", "error")))))) %>% -->
+<!--                       mutate(burnSeverityClass = factor(burnSeverityClass, -->
+<!--                                                 levels = c("< 20%", "20-40%", "40-60%", -->
+<!--                                                            "60-80%", "> 80%"))) %>% #Reorder factors for plotting -->
+<!--                       filter(scale=="Cat"), -->
+<!--              aes(lake_lon_decdeg, lake_lat_decdeg, fill=burnSeverityClass), -->
+<!--              shape=21, size=1.5)+ -->
+<!--   ggpubr::theme_pubr(base_size=12)+ -->
+<!--   theme(axis.title=element_blank())+ -->
+<!--     scale_fill_manual(values=c("#264653","#2a9d8f","#e9c46a","#f4a261","#e76f51"), -->
+<!--                     name="Burn severity (% area)")+ -->
+<!--   labs(title="Lakes that burned in the western US", -->
+<!--        subtitle="") -->
+<!-- ``` -->
+<!-- \newpage -->
+<!-- What if we only look at the most severe burns? Where are those sites? -->
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
-ggplot()+
-    geom_sf(data = us,color = "black")+
-      geom_polygon(data=states, aes(x=long, y=lat, group=group),
-               fill=NA, color="black",
-               linetype="dashed")+
-    geom_sf(data=rivers50, color="lightblue")+
-    annotation_scale(location = "bl", width_hint = 0.5) +
-    coord_sf(xlim = c(-125, -103), ylim = c(32, 49), expand=TRUE)+
-  geom_jitter(data=MTBS_long %>%
-                      filter(value>1)%>%
-                      group_by(scale)%>%
-                      mutate(burnSeverityClass=
-                              ifelse(value >1 & value <=20, "< 20%", 
-                                     ifelse(value >20 & value <=40, "20-40%", 
-                                            ifelse(value >40 & value <=60, "40-60%", 
-                                                   ifelse(value >60 & value <=80, "60-80%",
-                                                          ifelse(value >80 , "> 80%", "error")))))) %>%
-                      filter(burnSeverityClass=="> 80%") %>%
-                      filter(scale=="Cat"),
-             aes(lake_lon_decdeg, lake_lat_decdeg, fill=burnSeverityClass),
-             shape=21, size=1.5)+
-  ggpubr::theme_pubr(base_size=12)+
-  theme(axis.title=element_blank())+
-    scale_fill_manual(values=c("#e76f51"),
-                    name="Burn severity (% area)")
-```
+<!-- ```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7} -->
+<!-- ggplot()+ -->
+<!--     geom_sf(data = us,color = "black")+ -->
+<!--       geom_polygon(data=states, aes(x=long, y=lat, group=group), -->
+<!--                fill=NA, color="black", -->
+<!--                linetype="dashed")+ -->
+<!--     geom_sf(data=rivers50, color="lightblue")+ -->
+<!--     annotation_scale(location = "bl", width_hint = 0.5) + -->
+<!--     coord_sf(xlim = c(-125, -103), ylim = c(32, 49), expand=TRUE)+ -->
+<!--   geom_jitter(data=MTBS_long %>% -->
+<!--                       filter(value>1)%>% -->
+<!--                       group_by(scale)%>% -->
+<!--                       mutate(burnSeverityClass= -->
+<!--                               ifelse(value >1 & value <=20, "< 20%",  -->
+<!--                                      ifelse(value >20 & value <=40, "20-40%",  -->
+<!--                                             ifelse(value >40 & value <=60, "40-60%",  -->
+<!--                                                    ifelse(value >60 & value <=80, "60-80%", -->
+<!--                                                           ifelse(value >80 , "> 80%", "error")))))) %>% -->
+<!--                       filter(burnSeverityClass=="> 80%") %>% -->
+<!--                       filter(scale=="Cat"), -->
+<!--              aes(lake_lon_decdeg, lake_lat_decdeg, fill=burnSeverityClass), -->
+<!--              shape=21, size=1.5)+ -->
+<!--   ggpubr::theme_pubr(base_size=12)+ -->
+<!--   theme(axis.title=element_blank())+ -->
+<!--     scale_fill_manual(values=c("#e76f51"), -->
+<!--                     name="Burn severity (% area)") -->
+<!-- ``` -->
 
-Wow! Loads of lakes all over. Way more than I anticipated in Idaho. What if we look at all the lakes where >80% of the watershed burned... WHEN did those burns occur?
-\newpage
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
+<!-- Wow! Loads of lakes all over. Way more than I anticipated in Idaho. What if we look at all the lakes where >80% of the watershed burned... WHEN did those burns occur? -->
+<!-- \newpage -->
+<!-- ```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7} -->
 
-ggplot()+
-    geom_sf(data = us,color = "black")+
-      geom_polygon(data=states, aes(x=long, y=lat, group=group),
-               fill=NA, color="black",
-               linetype="dashed")+
-    geom_sf(data=rivers50, color="lightblue")+
-    annotation_scale(location = "bl", width_hint = 0.5) +
-    coord_sf(xlim = c(-125, -103), ylim = c(32, 49), expand=TRUE)+
-  geom_jitter(data=MTBS_long %>%
-                      filter(value>1)%>%
-                      group_by(scale)%>%
-                      mutate(burnSeverityClass=
-                              ifelse(value >1 & value <=20, "< 20%", 
-                                     ifelse(value >20 & value <=40, "20-40%", 
-                                            ifelse(value >40 & value <=60, "40-60%", 
-                                                   ifelse(value >60 & value <=80, "60-80%",
-                                                          ifelse(value >80 , "> 80%", "error")))))) %>%
-                      filter(burnSeverityClass=="> 80%") %>%
-                      filter(scale=="Cat")%>%
-                    mutate(year=as.numeric(year)),
-             aes(lake_lon_decdeg, lake_lat_decdeg, fill=year),
-             shape=21, size=1.5)+
-  ggpubr::theme_pubr(base_size=12)+
-  theme(axis.title=element_blank())+
-  scale_fill_continuous_sequential(palette="ag_Sunset")+
-  scale_color_continuous_sequential(palette="ag_Sunset")+
-  labs(title="Timing of severe burns",
-       subtitle="")
+<!-- ggplot()+ -->
+<!--     geom_sf(data = us,color = "black")+ -->
+<!--       geom_polygon(data=states, aes(x=long, y=lat, group=group), -->
+<!--                fill=NA, color="black", -->
+<!--                linetype="dashed")+ -->
+<!--     geom_sf(data=rivers50, color="lightblue")+ -->
+<!--     annotation_scale(location = "bl", width_hint = 0.5) + -->
+<!--     coord_sf(xlim = c(-125, -103), ylim = c(32, 49), expand=TRUE)+ -->
+<!--   geom_jitter(data=MTBS_long %>% -->
+<!--                       filter(value>1)%>% -->
+<!--                       group_by(scale)%>% -->
+<!--                       mutate(burnSeverityClass= -->
+<!--                               ifelse(value >1 & value <=20, "< 20%",  -->
+<!--                                      ifelse(value >20 & value <=40, "20-40%",  -->
+<!--                                             ifelse(value >40 & value <=60, "40-60%",  -->
+<!--                                                    ifelse(value >60 & value <=80, "60-80%", -->
+<!--                                                           ifelse(value >80 , "> 80%", "error")))))) %>% -->
+<!--                       filter(burnSeverityClass=="> 80%") %>% -->
+<!--                       filter(scale=="Cat")%>% -->
+<!--                     mutate(year=as.numeric(year)), -->
+<!--              aes(lake_lon_decdeg, lake_lat_decdeg, fill=year), -->
+<!--              shape=21, size=1.5)+ -->
+<!--   ggpubr::theme_pubr(base_size=12)+ -->
+<!--   theme(axis.title=element_blank())+ -->
+<!--   scale_fill_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   scale_color_continuous_sequential(palette="ag_Sunset")+ -->
+<!--   labs(title="Timing of severe burns", -->
+<!--        subtitle="") -->
 
-```
+<!-- ``` -->
 
-\newpage
+<!-- \newpage -->
 # Water color proof of concept
 
 How many lakes do we have where the local catchment burned >90%? We think that is where we are most likely to see a color response if there is one. 

@@ -316,7 +316,6 @@ bailey_sp <- readOGR(
 bailey_sp <- spTransform(bailey_sp, CRS("+proj=longlat +ellps=GRS80"))
 
 #Look under the hood a bit
-bailey_sp
 # glimpse(bailey_sp)
 # unique(bailey_sp$DOMAIN)
 # unique(bailey_sp$DIVISION)
