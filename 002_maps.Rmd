@@ -206,7 +206,7 @@ less60<-MTBS_mapdf2 %>% filter(burnSeverityClass=="40-60%")
 less80<-MTBS_mapdf2 %>% filter(burnSeverityClass=="60-80%")
 over80<-MTBS_mapdf2 %>% filter(burnSeverityClass=="> 80%")
 
-leaflet(MTBS_mapdf2) %>%
+map2<-leaflet(MTBS_mapdf2) %>%
   addProviderTiles("Stamen.Terrain") %>%
   addCircleMarkers(data = less20, # first group
                    radius = 3.5,
@@ -275,7 +275,10 @@ leaflet(MTBS_mapdf2) %>%
             title = "Burn severity class") %>% 
   addLayersControl(overlayGroups = c("< 20%", "20-40%", "40-60%","60-80%", "> 80%"),
                    options = layersControlOptions(collapsed = FALSE))
+map2
 ```
+
+Summary table with the counts of lakes by burn severity class: 
 
 ```{r}
 MTBS_long %>%
@@ -312,35 +315,14 @@ bailey_sp <- readOGR(
 )
 bailey_sp <- spTransform(bailey_sp, CRS("+proj=longlat +ellps=GRS80"))
 
-# summary(bailey_sp)
-# length(bailey_sp)
-# head(bailey_sp@data)
+#Look under the hood a bit
+bailey_sp
 # glimpse(bailey_sp)
-# library(broom)
-# spdf_fortified <- tidy(bailey_sp, region = "DIVISION")
-# glimpse(spdf_fortified)
-# unique(spdf_fortified$id)
-# spdf_fortified_short<- spdf_fortified %>%
-#   filter(id %in% c("Prairie Division",
-#                    "Hot Continental Division"))
-# glimpse(spdf_fortified_short)
-# # Plot it
-# library(ggplot2)
-# ggplot() +
-#   geom_polygon(data = spdf_fortified_short, aes( x = long, y = lat, group = group, fill=),
-#                fill="blue",color="white") +
-#   theme_void() 
+# unique(bailey_sp$DOMAIN)
+# unique(bailey_sp$DIVISION)
+# unique(bailey_sp$ECO_US_ID)
 
-
-##Take the original bailey_sp but narrow it down to the divisions in spdf_fortified_short
-
-# create a new version
-bailey_sp<-bailey_sp
-glimpse(bailey_sp)
-unique(bailey_sp$DOMAIN)
-unique(bailey_sp$DIVISION)
-unique(bailey_sp$ECO_US_ID)
-
+#Pick out the Divisions we want to map
 toMatch <- c("Temperate Steppe Regime Mountains",
              "Temperate Steppe Division",
              "Temperate Desert Division",
@@ -354,12 +336,12 @@ toMatch <- c("Temperate Steppe Regime Mountains",
              "Mediterranean Division")
 
 
-# bailey_sp <- bailey_sp[grep("DRY", bailey_sp$DOMAIN),]
+#Update bailey_sp to only include that paired down list of divisions
 bailey_sp <- bailey_sp[grep(paste(toMatch,collapse="|"), 
                         bailey_sp$DIVISION),]
-# bailey_sp<-rbind(bailey_spA,bailey_spB)
-class(bailey_sp)
-glimpse(bailey_sp)
+
+# class(bailey_sp)
+# glimpse(bailey_sp)
 
 #Burn severity palette
 mypalette<-RColorBrewer::brewer.pal(5,"YlOrRd")
@@ -368,7 +350,8 @@ pal <- colorFactor(palette = mypalette,
 #Ecoregion palette
 pal2  <- colorFactor("BrBG",  domain=unique(bailey_sp$DIVISION), reverse = TRUE)
 
-leaflet(MTBS_mapdf2) %>%
+
+map3<-leaflet(MTBS_mapdf2) %>%
   addProviderTiles("CartoDB.Positron") %>%
   addPolygons(data=bailey_sp,
               weight=1,
@@ -461,5 +444,5 @@ leaflet(MTBS_mapdf2) %>%
       addLayersControl(overlayGroups = c("< 20%", "20-40%", "40-60%","60-80%", "> 80%","Ecoregions"),
                    options = layersControlOptions(collapsed = FALSE)) %>%
   setView(-110.8951,38, zoom=5) #Zoom into map a bit so we don't see Alaska
-
+map3
 ```
