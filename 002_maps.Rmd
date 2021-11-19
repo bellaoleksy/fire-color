@@ -132,9 +132,9 @@ You can use the leaflet below to look at clusters of large fires through time, w
 
 If you hover over the point, the year is displayed. If you click on a point, you will see the lake name, comid, and percentage of the local catchment that burned that year. 
 
-Right away you can see some clustering. For example, the 1988 Yellowstone fire complex shows up pretty vividly in the northwestern corner of Wyoming. There appears to be a lot more redish/purple hues in California where we know wildfires have been increasing. 
+Right away you can see some clustering. For example, the 1988 Yellowstone fire complex shows up pretty vividly in the northwestern corner of Wyoming. There appears to be a lot more yellow/orange hues in California where we know wildfires have been increasing. 
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=10, fig.height=7}
 
 MTBS_mapdf1<-MTBS_long %>%
 filter(value>1)%>%
@@ -152,15 +152,17 @@ map1<-leaflet(MTBS_mapdf1) %>%
     stroke = FALSE, fillOpacity = 0.5,
     lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
     label = ~as.character(year),
-    popup = ~paste0("Lake name: ",lake_namegnis,
-                    "<br/>COMID: ",nhdplusv2_comid,
-                   "<br/>Percentage burned: ",value,
-                   "<br/>Year: ",year)) %>%
+    popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year)) %>%
   addLegend("bottomleft",
             title="Year of burn",
             pal = pal, values = ~year,
             labFormat = labelFormat(big.mark="")) 
 map1
+
+
 ```
 
 If you zoom in on just california you can see that there is a large group of lakes in northern California that burned in the late 2010s. There is another group of lakes in southern California that burned about 10 years earlier. Will be interesting to see the burn severity on those sites, and look at their recovery trajectory. 
@@ -170,7 +172,7 @@ If you zoom in on just california you can see that there is a large group of lak
 
 This version of the map lets us look at lakes based on burn severity classes. I created this tool so we could identify clusters of high severity burn areas that affected lakes. 
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=8, fig.height=7}
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=10, fig.height=7}
 MTBS_mapdf2 <- MTBS_long %>%
                       filter(value>1)%>%
                       group_by(scale)%>%
@@ -188,10 +190,13 @@ MTBS_mapdf2 <- MTBS_long %>%
        value=round(value,1),
        value=format(value, scientific = FALSE))
 
-pal <- 
-   colorFactor(palette = c("#264653","#2a9d8f","#e9c46a","#f4a261","#e76f51"),
+# pal <- 
+#    colorFactor(palette = c("#264653","#2a9d8f","#e9c46a","#f4a261","#e76f51"),
+#                levels = c("< 20%", "20-40%", "40-60%","60-80%", "> 80%"))
+#Burn severity palette
+mypalette<-RColorBrewer::brewer.pal(5,"YlOrRd")
+pal <- colorFactor(palette = mypalette,
                levels = c("< 20%", "20-40%", "40-60%","60-80%", "> 80%"))
-
 
 ## Toggle the burn severity indices with some layering
 ## https://community.rstudio.com/t/addlayerscontrol-displays-only-one-base-layer/63899/2
@@ -208,10 +213,10 @@ leaflet(MTBS_mapdf2) %>%
                    fillOpacity = .5,
                    stroke = FALSE,
                        lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
-                   popup = ~paste0("Lake name: ",lake_namegnis,
-                    "<br/>COMID: ",nhdplusv2_comid,
-                   "<br/>Percentage burned: ",value,
-                   "<br/>Year: ",year),
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
                    color = ~pal(burnSeverityClass),
                    # clusterOptions = markerClusterOptions(),
                    group = "< 20%") %>% 
@@ -220,10 +225,10 @@ leaflet(MTBS_mapdf2) %>%
                    fillOpacity = .5,
                    stroke = FALSE,
                        lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
-                   popup = ~paste0("Lake name: ",lake_namegnis,
-                    "<br/>COMID: ",nhdplusv2_comid,
-                   "<br/>Percentage burned: ",value,
-                   "<br/>Year: ",year),
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
                    color = ~pal(burnSeverityClass),
                    # clusterOptions = markerClusterOptions(),
                    group = "20-40%") %>% 
@@ -232,10 +237,10 @@ leaflet(MTBS_mapdf2) %>%
                    fillOpacity = .5,
                    stroke = FALSE,
                        lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
-                   popup = ~paste0("Lake name: ",lake_namegnis,
-                    "<br/>COMID: ",nhdplusv2_comid,
-                   "<br/>Percentage burned: ",value,
-                   "<br/>Year: ",year),
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
                    color = ~pal(burnSeverityClass),
                    # clusterOptions = markerClusterOptions(),
                    group = "40-60%") %>% 
@@ -244,10 +249,10 @@ leaflet(MTBS_mapdf2) %>%
                    fillOpacity = .5,
                    stroke = FALSE,
                        lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
-                   popup = ~paste0("Lake name: ",lake_namegnis,
-                    "<br/>COMID: ",nhdplusv2_comid,
-                   "<br/>Percentage burned: ",value,
-                   "<br/>Year: ",year),
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
                    color = ~pal(burnSeverityClass),
                    # clusterOptions = markerClusterOptions(),
                    group = "60-80%") %>% 
@@ -256,10 +261,10 @@ leaflet(MTBS_mapdf2) %>%
                    fillOpacity = .5,
                    stroke = FALSE,
                    lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
-                   popup = ~paste0("Lake name: ",lake_namegnis,
-                    "<br/>COMID: ",nhdplusv2_comid,
-                   "<br/>Percentage burned: ",value,
-                   "<br/>Year: ",year),
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
                    color = ~pal(burnSeverityClass),
                    # clusterOptions = markerClusterOptions(),
                    group = "> 80%") %>% 
@@ -289,4 +294,214 @@ MTBS_long %>%
   summarize(n=length(unique(nhdplusv2_comid))) %>%
   rename(`Number of lakes`=n,
          `Burn severity class`=burnSeverityClass)
+```
+
+
+### Maps -- by ecoregion
+
+This map is similar to the previous map, except here we can look at burn severity class by [Bailey's Ecoregion and subregion](https://doi.org/10.2737/RDS-2016-0003). You can click on the individual polygons and get information on which ecoregion division & province a particular lake belongs to. You can toggle the burn severity class to get an idea of where the most severe fires have happened since 1984.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE,fig.width=10, fig.height=7}
+library(rgdal)
+
+#Fetch Bailey Ecoregion data and read in shapefile
+bailey_sp <- readOGR(
+  dsn= "~/Dropbox/dropbox Research/fire-color/data/lakeCat/BaileysEcoregion/Data" ,
+  layer="eco_us",
+  verbose=FALSE
+)
+bailey_sp <- spTransform(bailey_sp, CRS("+proj=longlat +ellps=GRS80"))
+
+# summary(bailey_sp)
+# length(bailey_sp)
+# head(bailey_sp@data)
+# glimpse(bailey_sp)
+# library(broom)
+# spdf_fortified <- tidy(bailey_sp, region = "DIVISION")
+# glimpse(spdf_fortified)
+# unique(spdf_fortified$id)
+# spdf_fortified_short<- spdf_fortified %>%
+#   filter(id %in% c("Prairie Division",
+#                    "Hot Continental Division"))
+# glimpse(spdf_fortified_short)
+# # Plot it
+# library(ggplot2)
+# ggplot() +
+#   geom_polygon(data = spdf_fortified_short, aes( x = long, y = lat, group = group, fill=),
+#                fill="blue",color="white") +
+#   theme_void() 
+
+
+##Take the original bailey_sp but narrow it down to the divisions in spdf_fortified_short
+
+# create a new version
+bailey_sp<-bailey_sp
+glimpse(bailey_sp)
+unique(bailey_sp$DOMAIN)
+unique(bailey_sp$DIVISION)
+
+toMatch <- c("Temperate Steppe Regime Mountains",
+             "Temperate Steppe Division",
+             "Temperate Desert Division",
+             "Temperate Desert Regime Mountains",
+             "Tropical/Subtropical Desert Division",
+             "Tropical/Subtropical Steppe Division",
+             "Tropical/Subtropical Regime Mountains",
+             "Marine Division",
+             "Marine Regime Mountains",
+             "Mediterranean Regime Mountains",
+             "Mediterranean Division")
+
+
+# bailey_sp <- bailey_sp[grep("DRY", bailey_sp$DOMAIN),]
+bailey_sp <- bailey_sp[grep(paste(toMatch,collapse="|"), 
+                        bailey_sp$DIVISION),]
+# bailey_sp<-rbind(bailey_spA,bailey_spB)
+class(bailey_sp)
+glimpse(bailey_sp)
+
+
+
+# MTBS_mapdf1<-MTBS_long %>%
+# filter(value>1)%>%
+# filter(scale=="Cat")%>%
+# mutate(year=as.numeric(year),
+#        value=round(value,1),
+#        value=format(value, scientific = FALSE))
+# 
+# pal <- colorNumeric("plasma",  domain=unique(MTBS_mapdf1$year))
+# pal2  <- colorFactor("plasma",  domain=unique(bailey_sp$DIVISION))
+# leaflet(MTBS_mapdf1) %>%
+#   addProviderTiles("CartoDB.Positron") %>%
+#   addPolygons(data=bailey_sp,weight=1,col = 'black',
+#               fillColor=pal2(bailey_sp$DIVISION),
+#               group = "Ecoregions") %>%
+#   addCircleMarkers(
+#     # color = ~pal(year),
+#     color = "#000000",
+#     stroke = FALSE, fillOpacity = 0.3,
+#     radius = 3.5,
+#     lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
+#     label = ~as.character(year),
+#     popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+#                     "<br/><b>COMID:</b> ",nhdplusv2_comid,
+#                    "<br/><b>Percentage burned:</b> ",value,
+#                    "<br/><b>Year:</b> ",year),
+#     group = "Fire Locations") %>%
+#   addLegend(pal = pal2, 
+#             values = bailey_sp$DIVISION, 
+#             position = "bottomleft", 
+#             title = "Bailey Ecoregion Division",
+#             group = "Ecoregions") %>%
+#   # addLegend("bottomleft",
+#   #           title="Year of burn",
+#   #           pal = pal, values = ~year,
+#   #           labFormat = labelFormat(big.mark=""),
+#   #           group = "Fire Locations") %>%
+#     addLayersControl(overlayGroups = c("Fire Locations","Ecoregions"),
+#                    options = layersControlOptions(collapsed = FALSE)) %>%
+#   setView(-110.8951,38, zoom=4)
+# glimpse(bailey_sp)
+
+#Burn severity palette
+mypalette<-RColorBrewer::brewer.pal(5,"YlOrRd")
+pal <- colorFactor(palette = mypalette,
+               levels = c("< 20%", "20-40%", "40-60%","60-80%", "> 80%"))
+#Ecoregion palette
+pal2  <- colorFactor("BrBG",  domain=unique(bailey_sp$DIVISION), reverse = TRUE)
+
+leaflet(MTBS_mapdf2) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=bailey_sp,
+              weight=1,
+              fillOpacity = 1,
+              col = 'black',
+              fillColor=pal2(bailey_sp$DIVISION),
+              group = "Ecoregions",
+              popup = ~paste0("<b>Division:</b> ",bailey_sp$DIVISION,
+                              "<br/><b>Province:</b>", bailey_sp$PROVINCE)) %>%
+  addCircleMarkers(data = less20, # first group
+                   radius = 3.5,
+                   fillOpacity = .5,
+                   color = "black",
+                   stroke = TRUE,
+                   weight = 1,
+                   lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
+                   fillColor = ~pal(burnSeverityClass),
+                   # clusterOptions = markerClusterOptions(),
+                   group = "< 20%") %>% 
+  addCircleMarkers(data = less40, # second group
+                   radius = 3.5,
+                   fillOpacity = .5,
+                   color = "black",
+                   stroke = TRUE,
+                   weight = 1,
+                   lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
+                   fillColor = ~pal(burnSeverityClass),
+                   # clusterOptions = markerClusterOptions(),
+                   group = "20-40%") %>% 
+    addCircleMarkers(data = less60, # third group
+                   radius = 3.5,
+                   fillOpacity = .5,
+                   color = "black",
+                   stroke = TRUE,
+                   weight = 1,
+                   lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
+                   fillColor = ~pal(burnSeverityClass),
+                   # clusterOptions = markerClusterOptions(),
+                   group = "40-60%") %>% 
+      addCircleMarkers(data = less80, # fourth group
+                   radius = 3.5,
+                   fillOpacity = .5,
+                   color = "black",
+                   stroke = TRUE,
+                   weight = 1,
+                   lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID:</b> ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b> ",year),
+                   fillColor = ~pal(burnSeverityClass),
+                   # clusterOptions = markerClusterOptions(),
+                   group = "60-80%") %>% 
+        addCircleMarkers(data = over80, # fourth group
+                   radius = 3.5,
+                   fillOpacity = .5,
+                   color = "black",
+                   stroke = TRUE,
+                   weight = 1,
+                   lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
+                   popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
+                    "<br/><b>COMID</b>: ",nhdplusv2_comid,
+                   "<br/><b>Percentage burned:</b> ",value,
+                   "<br/><b>Year:</b>",year),
+                   fillColor = ~pal(burnSeverityClass),
+                   # clusterOptions = markerClusterOptions(),
+                   group = "> 80%") %>% 
+    addLegend(pal = pal2, 
+            values = bailey_sp$DIVISION, 
+            position = "bottomleft", 
+            title = "Bailey's Ecoregion Division",
+            group = "Ecoregions") %>%
+  addLegend(position = "bottomleft",
+            values = ~burnSeverityClass,
+            # opacity = .7,
+            pal = pal, # palette declared previously
+            title = "Burn severity class") %>%
+      addLayersControl(overlayGroups = c("< 20%", "20-40%", "40-60%","60-80%", "> 80%","Ecoregions"),
+                   options = layersControlOptions(collapsed = FALSE)) %>%
+  setView(-110.8951,38, zoom=5) #Zoom into map a bit so we don't see Alaska
+
 ```
