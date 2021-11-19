@@ -145,7 +145,7 @@ mutate(year=as.numeric(year),
 
 pal <- colorNumeric("plasma",  domain=unique(MTBS_mapdf1$year))
 
-leaflet(MTBS_mapdf1) %>%
+map1<-leaflet(MTBS_mapdf1) %>%
   addProviderTiles("Stamen.Terrain") %>%
   addCircleMarkers(
     color = ~pal(year),
@@ -160,7 +160,7 @@ leaflet(MTBS_mapdf1) %>%
             title="Year of burn",
             pal = pal, values = ~year,
             labFormat = labelFormat(big.mark="")) 
-
+map1
 ```
 
 If you zoom in on just california you can see that there is a large group of lakes in northern California that burned in the late 2010s. There is another group of lakes in southern California that burned about 10 years earlier. Will be interesting to see the burn severity on those sites, and look at their recovery trajectory. 
