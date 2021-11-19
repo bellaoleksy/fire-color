@@ -339,6 +339,7 @@ bailey_sp<-bailey_sp
 glimpse(bailey_sp)
 unique(bailey_sp$DOMAIN)
 unique(bailey_sp$DIVISION)
+unique(bailey_sp$ECO_US_ID)
 
 toMatch <- c("Temperate Steppe Regime Mountains",
              "Temperate Steppe Division",
@@ -359,49 +360,6 @@ bailey_sp <- bailey_sp[grep(paste(toMatch,collapse="|"),
 # bailey_sp<-rbind(bailey_spA,bailey_spB)
 class(bailey_sp)
 glimpse(bailey_sp)
-
-
-
-# MTBS_mapdf1<-MTBS_long %>%
-# filter(value>1)%>%
-# filter(scale=="Cat")%>%
-# mutate(year=as.numeric(year),
-#        value=round(value,1),
-#        value=format(value, scientific = FALSE))
-# 
-# pal <- colorNumeric("plasma",  domain=unique(MTBS_mapdf1$year))
-# pal2  <- colorFactor("plasma",  domain=unique(bailey_sp$DIVISION))
-# leaflet(MTBS_mapdf1) %>%
-#   addProviderTiles("CartoDB.Positron") %>%
-#   addPolygons(data=bailey_sp,weight=1,col = 'black',
-#               fillColor=pal2(bailey_sp$DIVISION),
-#               group = "Ecoregions") %>%
-#   addCircleMarkers(
-#     # color = ~pal(year),
-#     color = "#000000",
-#     stroke = FALSE, fillOpacity = 0.3,
-#     radius = 3.5,
-#     lng = ~lake_lon_decdeg, lat = ~lake_lat_decdeg,
-#     label = ~as.character(year),
-#     popup = ~paste0("<b>Lake name:</b> ",lake_namegnis,
-#                     "<br/><b>COMID:</b> ",nhdplusv2_comid,
-#                    "<br/><b>Percentage burned:</b> ",value,
-#                    "<br/><b>Year:</b> ",year),
-#     group = "Fire Locations") %>%
-#   addLegend(pal = pal2, 
-#             values = bailey_sp$DIVISION, 
-#             position = "bottomleft", 
-#             title = "Bailey Ecoregion Division",
-#             group = "Ecoregions") %>%
-#   # addLegend("bottomleft",
-#   #           title="Year of burn",
-#   #           pal = pal, values = ~year,
-#   #           labFormat = labelFormat(big.mark=""),
-#   #           group = "Fire Locations") %>%
-#     addLayersControl(overlayGroups = c("Fire Locations","Ecoregions"),
-#                    options = layersControlOptions(collapsed = FALSE)) %>%
-#   setView(-110.8951,38, zoom=4)
-# glimpse(bailey_sp)
 
 #Burn severity palette
 mypalette<-RColorBrewer::brewer.pal(5,"YlOrRd")
