@@ -150,6 +150,8 @@ lakeIDs <- lakeIDs %>%
                       "MT", "WY", "CO",
                       "NM", "AZ")) 
 
+#For some reason there are TONS of duplicates (example, lagoslakeid==453667, Gunlock reservoir)
+lakeIDs <- distinct(lakeIDs, nhdplusv2_comid, .keep_all = TRUE)
 
 #Smith, N.J., K.E. Webster, L.K. Rodriguez, K.S. Cheruvelil, and P.A. Soranno. 2021. LAGOS-US LOCUS v1.0: Data module of location, identifiers, and physical characteristics of lakes and their watersheds in the conterminous U.S. ver 1. Environmental Data Initiative. https://doi.org/10.6073/pasta/e5c2fb8d77467d3f03de4667ac2173ca (Accessed 2021-11-19).
 

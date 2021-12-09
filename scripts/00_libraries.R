@@ -6,6 +6,7 @@
 if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
 if (!require('colorspace')) install.packages('colorspace'); library('colorspace')#Borrowed some code from their minimum working example: 
 if (!require('formatR')) install.packages('formatR'); library('formatR')
+if (!require('feather')) install.packages('feather'); library('feather')
 
 
 library(tidyverse)
