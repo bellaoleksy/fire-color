@@ -2,7 +2,7 @@
 
 Welcome to a repo for the fire-color project, where we are investigating changes in the color of lakes (as observed by satelites). How does lake color respond to fire in the local catchment and broader watershed? Why are some lakes more sensitive to fires than others?
 
-[Big Lake DWL shift](figures/BigLakeDWLshift.png)
+![Big Lake DWL shift](figures/BigLakeDWLshift.png)
 
 You can check out some of the burn severity maps I made here: http://rpubs.com/ioleksy/fire-color
 
