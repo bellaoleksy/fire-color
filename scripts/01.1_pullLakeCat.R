@@ -6,6 +6,16 @@ MTBS<-read.csv("~/Dropbox/dropbox Research/fire-color/data/lakeCat/MTBS.csv") %>
 # MTBS<-semi_join(MTBS,lakeIDs,by="nhdplusv2_comid")
 MTBS<-inner_join(MTBS,lakeIDs,by="nhdplusv2_comid")
 
+MTBS_burnCats<- MTBS %>%
+  select(nhdplusv2_comid, contains("Cat")) %>%
+  select(-c(CatPctFull,inStreamCat,CatAreaSqKm,wqp_monitoringlocationidentifier, wqp_monitoringlocationname)) %>%
+  mutate(sumBurn = rowSums(across(where(is.numeric)))) %>%
+  select(nhdplusv2_comid,sumBurn) %>%
+  mutate(burn_YN= 
+           ifelse(sumBurn > 0, "burned",
+                  ifelse(sumBurn <= 0, "unburned", "error"))) 
+
+MTBS <- left_join(MTBS, MTBS_burnCats, by="nhdplusv2_comid")
 
 # MTBS_Severity_1984<-read.csv(here("data/lakeCat/MTBS_Severity_1984.csv")) %>%
 #   rename(nhdplusv2_comid=COMID)%>%
