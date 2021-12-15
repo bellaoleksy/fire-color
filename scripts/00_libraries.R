@@ -7,6 +7,18 @@ if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
 if (!require('colorspace')) install.packages('colorspace'); library('colorspace')#Borrowed some code from their minimum working example: 
 if (!require('formatR')) install.packages('formatR'); library('formatR')
 if (!require('feather')) install.packages('feather'); library('feather')
+if (!require('zoo')) install.packages('zoo'); library('zoo') #rollapply()
+if (!require('furrr')) install.packages('furrr'); library('furrr') 
+if (!require('xts')) install.packages('xts'); library('xts') 
+if (!require('imputeTS')) install.packages('imputeTS'); library('imputeTS') 
+if (!require('purrr')) install.packages('purrr'); library('purrr') 
+if (!require('changepoint')) install.packages('changepoint'); library('changepoint') 
+
+#PCAs
+if (!require('ggfortify')) install.packages('ggfortify');library(ggfortify)
+if (!require('cluster')) install.packages('cluster');library(cluster)
+if (!require('FactoMineR')) install.packages('FactoMineR');library("FactoMineR")
+if (!require('factoextra')) install.packages('factoextra');library("factoextra")
 
 
 library(tidyverse)
