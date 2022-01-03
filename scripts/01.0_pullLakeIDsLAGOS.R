@@ -505,3 +505,130 @@ summary(as.factor(zoneIDs$mlra_zoneid))
 summary(as.factor(zoneIDs$bailey_zoneid)) 
 summary(as.factor(zoneIDs$neon_zoneid))
 detach(zoneIDs)               
+
+
+# Lake Depth --------------------------------------------------------------
+# https://portal.edirepository.org/nis/mapbrowse?scope=edi&identifier=1043&revision=1
+
+# Package ID: edi.1043.1 Cataloging System:https://pasta.edirepository.org.
+# Data set title: LAGOS-US DEPTH v1.0: Data module of observed maximum and mean lake depths for a subset of lakes in the conterminous U.S..
+# Data set creator:  Jemma Stachelek - Michigan State University 
+# Data set creator:  Lauren Rodriguez - Michigan State University 
+# Data set creator:  Jessica DÃaz VÃ¡zquez - Michigan State University 
+# Data set creator:  Arika Hawkins - Michigan State University 
+# Data set creator:  Ellie Phillips - Michigan State University 
+# Data set creator:  Allie Shoffner - Michigan State University 
+# Data set creator:  Ian McCullough - Michigan State University 
+# Data set creator:  Katelyn King - Michigan State University 
+# Data set creator:  Jake Namovich - Michigan State University 
+# Data set creator:  Lindsie Egedy - Michigan State University 
+# Data set creator:  Maggie Haite - Michigan State University 
+# Data set creator:  Patrick Hanly - Michigan State University 
+# Data set creator:  Katherine Webster - Michigan State University 
+# Data set creator:  Kendra Cheruvelil - Michigan State University 
+# Data set creator:  Patricia Soranno - Michigan State University 
+# Metadata Provider:  Jemma Stachelek - Michigan State University 
+# Metadata Provider:  Patrick Hanly - Michigan State University 
+# Metadata Provider:  Ian McCullough - Michigan State University 
+# Metadata Provider:  Katherine Webster - Michigan State University 
+# Metadata Provider:  Patricia Soranno - Michigan State University 
+# Contact:  Jemma Stachelek -  Michigan State University  - stachel2@msu.edu
+# Stylesheet v2.11 for metadata conversion into program: John H. Porter, Univ. Virginia, jporter@virginia.edu 
+
+inUrl1  <- "https://pasta.lternet.edu/package/data/eml/edi/1043/1/f6ffb2325156008edffbea5b6c1ea24c" 
+infile1 <- tempfile()
+try(download.file(inUrl1,infile1,method="curl"))
+if (is.na(file.size(infile1))) download.file(inUrl1,infile1,method="auto")
+
+
+lakedepth <-read.csv(infile1,header=F 
+               ,skip=1
+               ,sep=","  
+               ,quot='"' 
+               , col.names=c(
+                 "lagoslakeid",     
+                 "lake_namegnis",     
+                 "lake_states",     
+                 "lake_depth_state",     
+                 "lake_lat_decdeg",     
+                 "lake_lon_decdeg",     
+                 "lake_maxdepth_m",     
+                 "lake_meandepth_m",     
+                 "lake_waterarea_ha",     
+                 "lake_depth_sourcename",     
+                 "lake_depth_sourceurl",     
+                 "lake_maxdepth_effort",     
+                 "lake_meandepth_effort"    ), check.names=TRUE)
+
+unlink(infile1)
+
+# Fix any interval or ratio columns mistakenly read in as nominal and nominal columns read as numeric or dates read as strings
+
+if (class(lakedepth$lagoslakeid)=="factor") lakedepth$lagoslakeid <-as.numeric(levels(lakedepth$lagoslakeid))[as.integer(lakedepth$lagoslakeid) ]               
+if (class(lakedepth$lagoslakeid)=="character") lakedepth$lagoslakeid <-as.numeric(lakedepth$lagoslakeid)
+if (class(lakedepth$lake_namegnis)!="factor") lakedepth$lake_namegnis<- as.factor(lakedepth$lake_namegnis)
+if (class(lakedepth$lake_states)!="factor") lakedepth$lake_states<- as.factor(lakedepth$lake_states)
+if (class(lakedepth$lake_depth_state)!="factor") lakedepth$lake_depth_state<- as.factor(lakedepth$lake_depth_state)
+if (class(lakedepth$lake_lat_decdeg)=="factor") lakedepth$lake_lat_decdeg <-as.numeric(levels(lakedepth$lake_lat_decdeg))[as.integer(lakedepth$lake_lat_decdeg) ]               
+if (class(lakedepth$lake_lat_decdeg)=="character") lakedepth$lake_lat_decdeg <-as.numeric(lakedepth$lake_lat_decdeg)
+if (class(lakedepth$lake_lon_decdeg)=="factor") lakedepth$lake_lon_decdeg <-as.numeric(levels(lakedepth$lake_lon_decdeg))[as.integer(lakedepth$lake_lon_decdeg) ]               
+if (class(lakedepth$lake_lon_decdeg)=="character") lakedepth$lake_lon_decdeg <-as.numeric(lakedepth$lake_lon_decdeg)
+if (class(lakedepth$lake_maxdepth_m)=="factor") lakedepth$lake_maxdepth_m <-as.numeric(levels(lakedepth$lake_maxdepth_m))[as.integer(lakedepth$lake_maxdepth_m) ]               
+if (class(lakedepth$lake_maxdepth_m)=="character") lakedepth$lake_maxdepth_m <-as.numeric(lakedepth$lake_maxdepth_m)
+if (class(lakedepth$lake_meandepth_m)=="factor") lakedepth$lake_meandepth_m <-as.numeric(levels(lakedepth$lake_meandepth_m))[as.integer(lakedepth$lake_meandepth_m) ]               
+if (class(lakedepth$lake_meandepth_m)=="character") lakedepth$lake_meandepth_m <-as.numeric(lakedepth$lake_meandepth_m)
+if (class(lakedepth$lake_waterarea_ha)=="factor") lakedepth$lake_waterarea_ha <-as.numeric(levels(lakedepth$lake_waterarea_ha))[as.integer(lakedepth$lake_waterarea_ha) ]               
+if (class(lakedepth$lake_waterarea_ha)=="character") lakedepth$lake_waterarea_ha <-as.numeric(lakedepth$lake_waterarea_ha)
+if (class(lakedepth$lake_depth_sourcename)!="factor") lakedepth$lake_depth_sourcename<- as.factor(lakedepth$lake_depth_sourcename)
+if (class(lakedepth$lake_depth_sourceurl)!="factor") lakedepth$lake_depth_sourceurl<- as.factor(lakedepth$lake_depth_sourceurl)
+if (class(lakedepth$lake_maxdepth_effort)!="factor") lakedepth$lake_maxdepth_effort<- as.factor(lakedepth$lake_maxdepth_effort)
+if (class(lakedepth$lake_meandepth_effort)!="factor") lakedepth$lake_meandepth_effort<- as.factor(lakedepth$lake_meandepth_effort)
+
+# Convert Missing Values to NA for non-dates
+
+lakedepth$lake_namegnis <- as.factor(ifelse((trimws(as.character(lakedepth$lake_namegnis))==trimws("NULL")),NA,as.character(lakedepth$lake_namegnis)))
+lakedepth$lake_maxdepth_m <- ifelse((trimws(as.character(lakedepth$lake_maxdepth_m))==trimws("NA")),NA,lakedepth$lake_maxdepth_m)               
+suppressWarnings(lakedepth$lake_maxdepth_m <- ifelse(!is.na(as.numeric("NA")) & (trimws(as.character(lakedepth$lake_maxdepth_m))==as.character(as.numeric("NA"))),NA,lakedepth$lake_maxdepth_m))
+lakedepth$lake_meandepth_m <- ifelse((trimws(as.character(lakedepth$lake_meandepth_m))==trimws("NA")),NA,lakedepth$lake_meandepth_m)               
+suppressWarnings(lakedepth$lake_meandepth_m <- ifelse(!is.na(as.numeric("NA")) & (trimws(as.character(lakedepth$lake_meandepth_m))==as.character(as.numeric("NA"))),NA,lakedepth$lake_meandepth_m))
+lakedepth$lake_depth_sourcename <- as.factor(ifelse((trimws(as.character(lakedepth$lake_depth_sourcename))==trimws("NULL")),NA,as.character(lakedepth$lake_depth_sourcename)))
+lakedepth$lake_depth_sourceurl <- as.factor(ifelse((trimws(as.character(lakedepth$lake_depth_sourceurl))==trimws("NULL")),NA,as.character(lakedepth$lake_depth_sourceurl)))
+lakedepth$lake_meandepth_effort <- as.factor(ifelse((trimws(as.character(lakedepth$lake_meandepth_effort))==trimws("NULL")),NA,as.character(lakedepth$lake_meandepth_effort)))
+
+
+# Here is the structure of the input data frame:
+str(lakedepth)                            
+attach(lakedepth)                            
+# The analyses below are basic descriptions of the variables. After testing, they should be replaced.                 
+
+summary(lagoslakeid)
+summary(lake_namegnis)
+summary(lake_states)
+summary(lake_depth_state)
+summary(lake_lat_decdeg)
+summary(lake_lon_decdeg)
+summary(lake_maxdepth_m)
+summary(lake_meandepth_m)
+summary(lake_waterarea_ha)
+summary(lake_depth_sourcename)
+summary(lake_depth_sourceurl)
+summary(lake_maxdepth_effort)
+summary(lake_meandepth_effort) 
+# Get more details on character variables
+
+summary(as.factor(lakedepth$lake_namegnis)) 
+summary(as.factor(lakedepth$lake_states)) 
+summary(as.factor(lakedepth$lake_depth_state)) 
+summary(as.factor(lakedepth$lake_depth_sourcename)) 
+summary(as.factor(lakedepth$lake_depth_sourceurl)) 
+summary(as.factor(lakedepth$lake_maxdepth_effort)) 
+summary(as.factor(lakedepth$lake_meandepth_effort))
+detach(lakedepth)               
+
+## Note, there is a dt2 included but I didn't paste it here because the information
+## didn't seem relevant. I could be wrong! Read metadata file at some point. 
+
+# Join to lakeIDs, just so we have a little more information
+colnames<-(intersect( colnames(lakeIDs),  colnames(lakedepth))) #identify common columns between data.tables
+lakeIDs <- left_join(lakeIDs, lakedepth, by=colnames)
+
