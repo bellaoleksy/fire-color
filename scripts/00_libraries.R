@@ -3,6 +3,7 @@
 if (!require('pacman')) install.packages('pacman'); library('pacman')
 
 pacman::p_load("ggplot2",
+               "ggtext",
                "colorspace",
                "formatR",
                "feather",
@@ -41,5 +42,6 @@ pacman::p_load("ggplot2",
                "ggfortify",
                "trend", #for sen slopes
                "zyp", #for sen slopes
-               "coin"
+               "coin",
+               "Rbeast"
                )

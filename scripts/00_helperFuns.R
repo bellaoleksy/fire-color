@@ -4,40 +4,17 @@
 plot_theme <- function(...) {
   theme_pubr() + theme(
     plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in"),
-    plot.title = element_text(
-      size=12,
-      face="bold",
-      family="sans"
-    ),
-    plot.caption = element_text(
-      size=8,
-      family="sans"
-    ),
-    plot.subtitle = element_text(
-      size=8,
-      family="sans"
-    ),
-    axis.title = element_text(
-      size=8,
-      face="bold",
-      family="sans"
-    ),
+    plot.title = element_text(size=12,face="bold"),
+    plot.caption = element_text(size=8),
+    plot.subtitle = element_text(size=8),
+    axis.title = element_text(size=8,face="bold"),
     axis.title.y = element_text(margin = margin(r=10, l=-10)),
     axis.title.x = element_text(margin = margin(t=10, b=-10)),
     axis.text.x = element_text(angle = 45, hjust = 1, size=8),
-    axis.text.y = element_text(
-      size=8,
-      family="sans"
-    ),
-    legend.title = element_text(
-      size=8,
-      face="bold",
-      family="sans"
-    ),
-    legend.text = element_text(
-      size=8,
-      family="sans"
-    ),
+    axis.text.y = element_text(size=8),
+    strip.text = element_text(size=6),
+    legend.title = element_text(size=8,face="bold"),
+    legend.text = element_text(size=8),
     #additional settings passed to theme()
     ...
   )
@@ -51,38 +28,31 @@ map_theme <- function(caption.hjust=1, caption.vjust=0, ...) {
     plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in"),
     plot.title = element_text(
       size=8,
-      face="bold",
-      family="sans"
+      face="bold"
     ),
     plot.caption = element_text(
       size=8,
-      family="sans",
       hjust = caption.hjust,
       vjust = caption.vjust
     ),
     plot.subtitle = element_text(
-      size=8,
-      family="sans"
+      size=8
     ),
     axis.title = element_blank(),
     axis.text.x = element_blank(),
     axis.text.y = element_text(
-      size=8,
-      family="sans"
+      size=8
     ),
     legend.title = element_text(
       size=8,
-      face="bold",
-      family="sans"
+      face="bold"
     ),
     legend.text = element_text(
-      size=8,
-      family="sans"
+      size=8
     ),
     strip.text = element_text(
       size=8,
-      face="bold",
-      family="sans"
+      face="bold"
     ),
     #additional settings passed to theme()
     ...
