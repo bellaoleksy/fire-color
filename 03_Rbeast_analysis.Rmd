@@ -17,7 +17,7 @@ knitr::opts_chunk$set(fig.width=6,fig.height=8,
 
 ```
 
-
+# WELCOME
 
 ```{r some package version control stuff, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 ##Hi! If you have never used renv read their little vignette here. 
@@ -26,7 +26,7 @@ knitr::opts_chunk$set(fig.width=6,fig.height=8,
 ##If you've ever had script not work after updating R/various libraries, using
 ##renv() is a nice way to avoid a lot of future headaches. -IAO
 
-if (!require('renv')) install.packages('renv');library('renv')
+# if (!require('renv')) install.packages('renv');library('renv')
 
 #Create a lockfile for packages
 # renv::init()
@@ -53,7 +53,7 @@ source("scripts/00_helperFuns.R")
 ```
 
 ### Load fire dataframe
-```{r , echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+```{r , eval=FALSE}
 # source("fire-color/scripts/01.0_pullLakeIDsLAGOS.R")
 # source("fire-color/scripts/01.1_pullLakeCat.R")
 
@@ -77,8 +77,8 @@ MTBS_long <- lakeCat %>%
 
 ```
 
-### Load color data
-```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+### Join burn severity and color data -- save for later
+```{r, eval=FALSE}
 #Read in NHD IDs that Matt sent
 HydroLakes_DP_comids <- read.csv("~/Dropbox/dropbox Research/fire-color/data/hydroLakes/HydroLakes_COMID.csv") %>%
   rename(nhdplusv2_comid=comid) %>%
@@ -132,9 +132,11 @@ colorSevereBurn<-left_join(MTBS_severe,srCor_comid_NAfree,by="nhdplusv2_comid") 
 length(unique(colorSevereBurn$nhdplusv2_comid))
 head(colorSevereBurn$yearBurn)
 
+
+save(colorSevereBurn, MTBS_severe, MTBS_long, file = 'data_export/rbeast_data.RData')
 ```
 
-
+# Start here
 ```{r}
-
+load(here('data_export/rbeast_data.RData'))
 ```
