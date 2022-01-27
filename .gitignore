@@ -56,3 +56,6 @@ vignettes/*.pdf
 
 #Ignore DS_Store!
 .DS_Store
+
+#Exclude RBeast figures
+/figures/Rbeast
