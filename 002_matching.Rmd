@@ -1,0 +1,362 @@
+---
+title: "fire-color: matching/casual inference methods"
+subtitle: "identifying post-fire color changes in lakes of the western U.S."
+author: "Bella Oleksy et al. "
+date: "Last compiled on `r format(Sys.time(), '%d %B, %Y')`"
+output:
+  bookdown::pdf_document2:
+    latex_engine: pdflatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir='..')
+knitr::opts_chunk$set(fig.width=6,fig.height=8,
+                      echo=FALSE, 
+               warning=FALSE, message=FALSE) 
+
+```
+
+
+
+```{r some package version control stuff, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+##Hi! If you have never used renv read their little vignette here. 
+##https://rstudio.github.io/renv/articles/renv.html
+
+##If you've ever had script not work after updating R/various libraries, using
+##renv() is a nice way to avoid a lot of future headaches. -IAO
+
+if (!require('renv')) install.packages('renv');library('renv')
+
+#Create a lockfile for packages
+# renv::init()
+```
+
+
+```{r Load necessary packages, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+if (!require('here')) install.packages('here');library('here') 
+
+
+##enable easy file referencing in project-oriented workflows.
+##https://rstats.wtf/project-oriented-workflow.html
+## ^ ^ a little more on that
+
+# source("fire-color/scripts/00_libraries.R")
+# source("fire-color/scripts/00_helperFuns.R")
+
+source("scripts/00_libraries.R")
+source("scripts/00_helperFuns.R")
+
+
+
+```
+
+
+```{r Load LAGOS IDs dataframe, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+# source("fire-color/scripts/01.0_pullLakeIDsLAGOS.R")
+# source("fire-color/scripts/01.1_pullLakeCat.R")
+
+# source("scripts/01.0_pullLakeIDsLAGOS.R")
+# source("scripts/01.1_pullLakeCat.R")
+#Currently only pulling out MTBS, FirePerimeters, and ForestLoss, but all the other data is in that R file and commented out for speed. 
+
+
+##Avoid running all those wrangling scripts
+##Last updated on 2022-01-11 when I made 3 burn categories- unburned, burned, severeBurn
+lakeCat <- readRDS(here("data_export", "lakeCat.rds"))
+# lakeCat <- readRDS(here("fire-color/data_export", "lakeCat.rds"))
+
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#Describes proportion of catchment / watershed within burn perimeters
+#But I think I'm missing the burn severity numbers 
+MTBS_long <- lakeCat %>%
+  dplyr::select(lagoslakeid, nhdplusv2_comid,lake_nhdid,nhdplusv2_reachcode,lake_namegnis,lake_rsvr_class,
+                lake_lon_decdeg, lake_lat_decdeg, lake_totalarea_ha, lake_maxdepth_m, lake_meandepth_m, sumBurn, burn_YN,
+                contains("MTBS"))%>%
+  pivot_longer(-(1:13), names_pattern = "(\\d+)([A-Za-z]+)", names_to = c("year","scale"))
+    # "([A-Za-z]+)" matches only letters, so will pull out just "Ws" or "Cat". "(\\d+)" matches digits and will pull out the year.
+  
+names(MTBS_long)
+```
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#Read in NHD IDs that Matt sent
+HydroLakes_DP_comids <- read.csv("~/Dropbox/dropbox Research/fire-color/data/hydroLakes/HydroLakes_COMID.csv") %>%
+  rename(nhdplusv2_comid=comid) %>%
+  mutate(nhdplusv2_comid=as.character(as.numeric(nhdplusv2_comid)),
+         Hylak_id=as.character(as.numeric(Hylak_id)),
+         gnis_id=as.character(as.numeric(gnis_id))) %>%
+  dplyr::select(Hylak_id, nhdplusv2_comid, gnis_id, gnis_name, meandepth, maxdepth) %>%
+#Remove possible dupicates
+  distinct(nhdplusv2_comid, .keep_all=TRUE) 
+
+#How many unique lakes?
+# length(unique(HydroLakes_DP_comids$nhdplusv2_comid))
+
+#Read in HydroLakes color stuff
+srCor<-read_feather('~/Dropbox/dropbox Research/Western-Color-Fire/srCorrected_us_hydrolakes_dp_20200628.feather') %>%
+  mutate(Hylak_id=as.character(as.numeric(Hylak_id))) %>%
+  select(Hylak_id,date,year,dWL)
+
+#Join HydroLakes_DP_comids_trim to srCor so we have COMID 
+srCor_comid<-left_join(srCor, HydroLakes_DP_comids, by="Hylak_id") %>%
+  drop_na(nhdplusv2_comid) %>%
+  mutate(year=as.character(as.numeric(year)))
+
+#Make master df
+colorBurn<-left_join(MTBS_long %>%
+                       filter(scale=="Cat"),srCor_comid,by=c("nhdplusv2_comid","year")) %>%
+  drop_na(dWL)
+
+#How many unique lakes?
+length(unique(colorBurn$nhdplusv2_comid))
+
+#Before I get too carried away let's test on a small set...
+colorBurn <- colorBurn %>%
+  mutate(month=month(date)) %>%
+  arrange(date) %>%
+  group_by(burn_YN, year, month, nhdplusv2_comid) %>%
+  distinct(date, .keep_all = TRUE) %>%
+  summarize(dWL = median(dWL, na.rm = TRUE)) %>%
+  # na.trim() %>%
+  ungroup() %>%
+  group_by(nhdplusv2_comid, burn_YN) %>%
+  mutate(n=n()) %>%
+  filter(n>60) %>%
+  select(-n) %>%
+  nest() %>% #Need to nest otherwise it'll only select one observation with the slice_sample function
+  #Randomly select 5 burned and 5 unburned sites
+  filter(burn_YN %in% c("unburned","severeBurn"))%>%
+  # group_by(burn_YN) %>%
+  # slice_sample(n = 5) %>%
+  unnest(cols=c(data))
+
+
+
+
+
+testBurned<-colorBurn %>%
+  filter(burn_YN=="severeBurn")
+
+severeBurnYear<-MTBS_long %>%
+  filter(burn_YN=="severeBurn") %>%
+  filter(value>=80)%>%
+  filter(scale=="Cat") %>%
+  dplyr::select(nhdplusv2_comid,year) %>%
+  rename(yearBurn=year) %>%
+  distinct(nhdplusv2_comid, .keep_all=TRUE) # Get rid of duplicates. Keeps the first burn
+
+testBurned <- left_join(testBurned,severeBurnYear) %>%
+  mutate(year=as.numeric(as.character(year)),
+         yearBurn=as.numeric(as.character(yearBurn))) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(fp = ifelse(year <= yearBurn, 
+                        0, 
+                        1)) 
+
+testUnburned<-colorBurn %>%
+  filter(burn_YN=="unburned") %>%
+  mutate(fp=0) %>%
+  mutate(year=as.numeric(as.character(year)))
+
+#bring them together again
+library(recipes)
+colorBurn <- bind_rows(testBurned, testUnburned) 
+
+colorBurn <- colorBurn %>%
+    mutate(firegroup = case_when(burn_YN == "severeBurn" ~ 1,
+                           burn_YN == "unburned" ~ 0)) 
+# 
+# colorBurn <- colorBurn %>%
+#   recipe(burn_YN ~ .) %>%
+#   step_dummy(burn_YN,
+#              one_hot=TRUE) %>%
+#   prep() %>%
+#   bake(colorBurn) %>%
+#   select(-burn_YN_unburned) %>%
+#   rename(firegroup=burn_YN_severeBurn) ## fire = 0 = no fire; fire = 1 = yes fire.
+
+# add covariates
+AllLakes<- lakeCat%>%
+  select(nhdplusv2_comid, burn_YN, lake_totalarea_ha, lake_perimeter_m, lake_waterarea_ha, lake_elevation_m,
+         WetIndexCat, SlopeCat) %>%
+  distinct(nhdplusv2_comid, .keep_all = TRUE) %>%
+    filter(burn_YN %in% c("severeBurn","unburned"))
+
+colnames<-(intersect( colnames(colorBurn),  colnames(AllLakes))) #identify common columns between data.tables
+colorBurn<- left_join(colorBurn,
+                      AllLakes,
+                      by="nhdplusv2_comid") %>%
+  mutate(t = ifelse(fp==0,
+                        1,
+                        2))
+
+
+## Small subset for testing
+colorBurn_subset <- colorBurn %>%
+  group_by(nhdplusv2_comid, burn_YN) %>%
+  nest() %>% #Need to nest otherwise it'll only select one observation with the slice_sample function
+  #Randomly select 20 severely burned and 20 unburned sites
+  group_by(burn_YN) %>%
+  slice_sample(n = 20) %>%
+  unnest(cols=c(data))
+```
+
+
+# Overview 
+
+In this document I'm going to be assessing some different methods for causual inference, such as propensity scoring, regression discontinuity, and difference-in-differences. 
+
+Big picture: we want to assess responses of lake color to fire and also compare those lakes to similar/matching lakes that did not burn. The reason we want to incorporate an apporach like this is because it allows us to "design" an observational study that mimics some of the particular characteristics of a randomized control trial. The "causal effect" we are trying to measure ist he impact of fire on lake color. So in our case the **control** is lakes in unburned watersheds and the **treatment** is lakes that experienced burns. Because fires are not randomly distributed across the landscape, we need to be careful in our design and how we interpret our results. We achieve the goal of matching by comparing populations of lakes that are similar in a number of covariates.
+
+Causal inference definition in Stuart 2010 *Statistical Science*: "Any method that aims to equate (or "balance") the distribution of covariates int he treatment and control group. This may involve 1:1 matching, weighting, or subclassification."
+
+## Covariates 
+
+Of all the lakes in the LakeCat dataset > 4 ha, how many burned at all (>1%) versus not at all?
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', fig.height=6}
+
+AllLakes<- lakeCat%>%
+  select(nhdplusv2_comid, lagoslakeid, sumBurn, burn_YN, lake_lat_decdeg, lake_lon_decdeg,
+         lake_perimeter_m, lake_totalarea_ha, lake_waterarea_ha, lake_elevation_m,
+         WetIndexCat, SlopeCat) %>%
+  distinct(nhdplusv2_comid, .keep_all = TRUE) %>%
+    filter(lake_totalarea_ha >=4) %>%
+    filter(burn_YN %in% c("severeBurn","unburned"))
+
+# length(unique(AllLakes$lagoslakeid))
+#~30,000 total lakes
+
+
+AllLakes %>%
+  filter(burn_YN %in% c("severeBurn","unburned"))%>%
+  group_by(burn_YN) %>%
+  summarize(n=length(unique(nhdplusv2_comid))) %>%
+  ungroup() 
+#About 10% of all lakes in the western US burned
+```
+
+And are there obvious differences among the lakes? 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', fig.height=6}
+burnCols <- c("severeBurn"="#d00000",
+              # "severBurn"="red",
+               "unburned"="#8d99ae")
+
+# Compare histograms of all the characteristics
+AllLakes %>%
+  mutate(lake_perimeter_m=log10(lake_perimeter_m),
+         lake_totalarea_ha=log10(lake_totalarea_ha),
+         lake_waterarea_ha=log10(lake_waterarea_ha),
+         # WetIndexCat=log10(WetIndexCat),
+         # SlopeCat=log10(SlopeCat),
+         burn_YN=factor(burn_YN,
+                        levels=c("unburned","severeBurn"))) %>%
+    filter(burn_YN %in% c("severeBurn","unburned"))%>%
+  pivot_longer(-(1:4)) %>%
+  ggplot( aes(x=value, fill=burn_YN)) +
+  geom_histogram( alpha=0.8, position = 'identity') +
+  scale_fill_manual(values=burnCols) +
+  # ggpubr::theme_pubr() +
+  labs(fill="Legend:")+
+  facet_wrap(.~name, scales="free", nrow=2)+
+  labs(title=str_wrap("Histograms of lake characteristics in burned and unburned lake-catchments",50),
+       subtitle="Note: perimeter, LA, and WSA were log10-transformed")
+```
+
+Nothing too different pops out at me with the histograms, but let's see what we can learn beyond just eye-balling the data. And obviously you can see how unbalanced the data are. Let's try to fix that.  
+
+### Propensity score example via MatchIt
+
+```{r, echo=TRUE, results="hide", tidy=TRUE,message=FALSE, warning=FALSE,out.width = '100%', fig.height=6}
+
+#Create binary variable for fire
+library(recipes)
+AllLakes<-AllLakes %>%
+  recipe(lake_lat_decdeg ~ .) %>%
+  step_dummy(burn_YN,
+             one_hot=TRUE) %>%
+  prep() %>%
+  bake(AllLakes) %>%
+  select(-burn_YN_unburned) %>%
+  rename(firegroup=burn_YN_severeBurn) ## fire = 0 = no fire; fire = 1 = yes fire.
+
+require(MatchIt)
+matching <- matchit(firegroup ~ lake_totalarea_ha + lake_waterarea_ha + lake_elevation_m + WetIndexCat + SlopeCat, method="nearest",
+                    data = colorBurn_subset, distance = "glm", link="probit", discard="both")
+
+summary(matching$model)
+```
+
+Calling summary(matching$model) gives the result of a binary probit model which estimates the propensity score, which is the probability of a lake having burned. As expected, slope and elevation are good predictors of fire. So is WetIndex which stands for Mean Composite Topographic Index (fairly highly correlated with slope, r= `r cor.test(AllLakes$WetIndexCat, AllLakes$SlopeCat)$estimate`).
+
+```{r, echo=TRUE, results="hide", tidy=TRUE,message=FALSE, warning=FALSE,out.width = '100%', fig.height=6}
+
+#To see the difference in the estimates of the difference between unmatched and matched obsevations along with standard errors and T-statistics we call...
+data_matched <- match.data(matching)
+
+t.test(subset(colorBurn_subset, firegroup==1)$dWL,
+       subset(colorBurn_subset, firegroup==0)$dWL)
+#Then compare to
+t.test(subset(data_matched, firegroup==1)$dWL,
+       subset(data_matched, firegroup==0)$dWL)
+
+## This is what makes me think that the Matching analysis may not be the best fit for our analysis because we want to have a way to split out the pre- and post-fire lake color
+
+#When using any matching algorithm, it is important to confirm how well the algorithm balances matched and unmatched observations.
+#MatchIt provides a way to do this by calling:
+summary(matching)
+
+```
+
+### Difference in differences
+
+```{r, echo=TRUE, results="hide", tidy=TRUE,message=FALSE, warning=FALSE,out.width = '100%', fig.height=6}
+
+# Create an interaction between time and treated. We will call this interaction ‘did’.
+#from https://www.princeton.edu/~otorres/DID101R.pdf
+colorBurn_subset$did = colorBurn_subset$fp * colorBurn_subset$firegroup
+
+
+olsreg <- lm(dWL ~ lake_totalarea_ha + lake_waterarea_ha + lake_elevation_m + WetIndexCat + SlopeCat,
+             data = subset(colorBurn_subset, fp == 1))
+summary(olsreg)
+
+#For the DID specifications, we run the following code:
+require(plm)
+#Get rid of NAs
+df <- colorBurn_subset %>%
+  drop_na(t) %>%
+  mutate(date = ymd(paste(year, month, "01", sep = "-")))
+
+plm <- plm(dWL ~ fp*firegroup + SlopeCat + lake_elevation_m, data=df,
+           model="pooling", index=c("nhdplusv2_comid","date","t"))
+summary(plm)
+
+# Declare as panel data
+panel <- pdata.frame(df, c("nhdplusv2_comid","date"))
+# each lake can be uniquely identified
+plm <- plm(dWL ~ did + SlopeCat + lake_elevation_m, data=panel,
+           model="pooling") 
+summary(plm)
+
+
+###  I THINK WHAT WE ARE GOING TO WANT TO DO TO MAKE THIS METHOD WORKS IS TO ONLY HAVE ONE VALUE FOR PRE- AND POST- FIRE PER LAKE.
+### SHOULD IT BE THE MEAN, MEDIAN? I'M NOT SURE AT THIS POINT. also might want to consider trimming the data so each site has someting like
+### 5 years of data before and 5 days of data AFTER the fire. 
+
+## Small subset for testing
+colorBurn_subset <- colorBurn %>%
+  group_by(nhdplusv2_comid, burn_YN) %>%
+  nest() %>% #Need to nest otherwise it'll only select one observation with the slice_sample function
+  #Randomly select 20 severely burned and 20 unburned sites
+  group_by(burn_YN) %>%
+  slice_sample(n = 20) %>%
+  unnest(cols=c(data))
+```
