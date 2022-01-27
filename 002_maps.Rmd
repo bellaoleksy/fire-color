@@ -26,8 +26,8 @@ library('here')
 ##https://rstats.wtf/project-oriented-workflow.html
 ## ^ ^ a little more on that
 
-source("fire-color/scripts/00_libraries.R")
-# source("scripts/00_libraries.R")
+# source("fire-color/scripts/00_libraries.R")
+source("scripts/00_libraries.R")
 
 # load packages
 library(dplyr)
