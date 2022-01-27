@@ -1,0 +1,140 @@
+---
+title: "fire-color: Rbeast"
+subtitle: "identifying post-fire color changes in lakes of the western U.S."
+author: "Bella Oleksy et al. "
+date: "Last compiled on `r format(Sys.time(), '%d %B, %Y')`"
+output:
+  bookdown::pdf_document2:
+    latex_engine: pdflatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, comment = F, message = F)
+knitr::opts_knit$set(root.dir='..')
+knitr::opts_chunk$set(fig.width=6,fig.height=8,
+                      echo=FALSE, 
+               warning=FALSE, message=FALSE) 
+
+```
+
+
+
+```{r some package version control stuff, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+##Hi! If you have never used renv read their little vignette here. 
+##https://rstudio.github.io/renv/articles/renv.html
+
+##If you've ever had script not work after updating R/various libraries, using
+##renv() is a nice way to avoid a lot of future headaches. -IAO
+
+if (!require('renv')) install.packages('renv');library('renv')
+
+#Create a lockfile for packages
+# renv::init()
+```
+
+
+
+```{r Load necessary packages, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+if (!require('here')) install.packages('here');library('here') 
+
+
+##enable easy file referencing in project-oriented workflows.
+##https://rstats.wtf/project-oriented-workflow.html
+## ^ ^ a little more on that
+
+# source("fire-color/scripts/00_libraries.R")
+# source("fire-color/scripts/00_helperFuns.R")
+
+source("scripts/00_libraries.R")
+source("scripts/00_helperFuns.R")
+
+
+
+```
+
+### Load fire dataframe
+```{r , echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+# source("fire-color/scripts/01.0_pullLakeIDsLAGOS.R")
+# source("fire-color/scripts/01.1_pullLakeCat.R")
+
+# source("scripts/01.0_pullLakeIDsLAGOS.R")
+# source("scripts/01.1_pullLakeCat.R")
+#Currently only pulling out MTBS, FirePerimeters, and ForestLoss, but all the other data is in that R file and commented out for speed. 
+
+
+##Avoid running all those wrangling scripts
+##Last updated on 2022-01-04
+lakeCat <- readRDS(here("data_export", "lakeCat.rds"))
+
+#Describes proportion of catchment / watershed within burn perimeters
+#But I think I'm missing the burn severity numbers 
+MTBS_long <- lakeCat %>%
+  dplyr::select(lagoslakeid, nhdplusv2_comid,lake_nhdid,nhdplusv2_reachcode,lake_namegnis,lake_rsvr_class,
+                lake_lon_decdeg, lake_lat_decdeg, lake_totalarea_ha, lake_maxdepth_m, lake_meandepth_m, sumBurn, burn_YN,
+                contains("MTBS"))%>%
+  pivot_longer(-(1:13), names_pattern = "(\\d+)([A-Za-z]+)", names_to = c("year","scale"))
+    # "([A-Za-z]+)" matches only letters, so will pull out just "Ws" or "Cat". "(\\d+)" matches digits and will pull out the year.
+
+```
+
+### Load color data
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#Read in NHD IDs that Matt sent
+HydroLakes_DP_comids <- read.csv("~/Dropbox/dropbox Research/fire-color/data/hydroLakes/HydroLakes_COMID.csv") %>%
+  rename(nhdplusv2_comid=comid) %>%
+  mutate(nhdplusv2_comid=as.character(as.numeric(nhdplusv2_comid)),
+         Hylak_id=as.character(as.numeric(Hylak_id)),
+         gnis_id=as.character(as.numeric(gnis_id))) 
+
+HydroLakes_DP_comids<-HydroLakes_DP_comids %>%
+  # separate(id, c("name","Hylak_id"),sep="nhdwaterbody.")%>%
+  dplyr::select(Hylak_id, nhdplusv2_comid, gnis_id, gnis_name, meandepth, maxdepth)
+
+
+#Remove possible dupicates
+HydroLakes_DP_comids_trim<- HydroLakes_DP_comids %>%
+  distinct(nhdplusv2_comid, .keep_all=TRUE) 
+# str(HydroLakes_DP_comids_trim)
+#How many unique lakes?
+# length(unique(HydroLakes_DP_comids_trim$nhdplusv2_comid))
+
+#Read in HydroLakes color stuff
+srCor<-read_feather('~/Dropbox/dropbox Research/Western-Color-Fire/srCorrected_us_hydrolakes_dp_20200628.feather') %>%
+  mutate(Hylak_id=as.character(as.numeric(Hylak_id))) 
+# str(srCor)
+
+#Join HydroLakes_DP_comids_trim to srCor so we have COMID 
+srCor_comid<-inner_join(srCor, HydroLakes_DP_comids, by="Hylak_id")
+#How many unique lakes?
+length(unique(srCor_comid$nhdplusv2_comid))
+
+srCor_comid_NAfree<-srCor_comid %>%
+  drop_na(nhdplusv2_comid) %>%
+  mutate(year=as.character(as.numeric(year)))
+#How many unique lakes?
+length(unique(srCor_comid_NAfree$nhdplusv2_comid))
+
+MTBS_severe<-MTBS_long %>%
+  filter(value>90)%>%
+  filter(scale=="Cat") %>%
+  dplyr::select(nhdplusv2_comid,lake_totalarea_ha,value,year) %>%
+  rename(yearBurn=year) %>%
+  group_by(nhdplusv2_comid) %>%
+  arrange(yearBurn) %>%
+  filter(row_number()==1) #There are a handful of lakes that burned multiple times; select just the FIRST burn which likely has the biggest impact.
+
+
+colorSevereBurn<-left_join(MTBS_severe,srCor_comid_NAfree,by="nhdplusv2_comid") %>%
+  drop_na(dWL) %>%
+  mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y"),
+         year=as.numeric(as.character(year)))
+#How many unique lakes?
+length(unique(colorSevereBurn$nhdplusv2_comid))
+head(colorSevereBurn$yearBurn)
+
+```
+
+
+```{r}
+
+```
