@@ -43,5 +43,8 @@ pacman::p_load("ggplot2",
                "trend", #for sen slopes
                "zyp", #for sen slopes
                "coin",
-               "Rbeast"
+               "Rbeast",
+               "formatR",
+               "tsibble",
+               "forcats"
                )
