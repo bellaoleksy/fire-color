@@ -1,6 +1,7 @@
 ##Load all the libraries your heart desires
 
 if (!require('pacman')) install.packages('pacman'); library('pacman')
+# remotes::install_github("MilesMcBain/breakerofchains")
 
 pacman::p_load("ggplot2",
                "ggtext",
@@ -46,5 +47,6 @@ pacman::p_load("ggplot2",
                "Rbeast",
                "formatR",
                "tsibble",
-               "forcats"
+               "forcats",
+               "breakerofchains"
                )
