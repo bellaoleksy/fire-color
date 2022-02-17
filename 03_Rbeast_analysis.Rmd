@@ -136,14 +136,14 @@ HydroLakes_DP_comids_trim<- HydroLakes_DP_comids %>%
 # length(unique(HydroLakes_DP_comids_trim$nhdplusv2_comid))
 
 #Read in HydroLakes color stuff
-srCor<-read_feather('~/Dropbox/dropbox Research/Western-Color-Fire/srCorrected_us_hydrolakes_dp_20200628.feather') %>%
+srCor<-read_feather('~/Dropbox/dropbox Research/fire-color/data/hydroLakes/srCorrected_us_hydrolakes_dp_20200628.feather') %>%
   mutate(Hylak_id=as.character(as.numeric(Hylak_id))) 
 # str(srCor)
 
 #Join HydroLakes_DP_comids_trim to srCor so we have COMID 
 srCor_comid<-inner_join(srCor, HydroLakes_DP_comids, by="Hylak_id")
 #How many unique lakes?
-length(unique(srCor_comid$nhdplusv2_comid))
+# length(unique(srCor_comid$nhdplusv2_comid))
 
 srCor_comid_NAfree<-srCor_comid %>%
   drop_na(nhdplusv2_comid) %>%
@@ -170,26 +170,62 @@ MTBS_moderate<-MTBS_long %>%
   filter(row_number()==1) #There are a handful of lakes that burned multiple times; select just the FIRST burn which likely has the biggest impact.
 
 
+#Find all the lakes that never burned
+MTBS_noburn <- MTBS_long %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(sum(value)==0) %>%
+  filter(scale=="Cat") %>%
+  dplyr::select(nhdplusv2_comid)
+
 
 colorSevereBurn<-left_join(MTBS_severe,srCor_comid_NAfree,by="nhdplusv2_comid") %>%
   drop_na(dWL) 
   # mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y"),
   #        year=as.numeric(as.character(year)))
 #How many unique lakes?
-length(unique(colorSevereBurn$nhdplusv2_comid))
-head(colorSevereBurn$yearBurn)
+# length(unique(colorSevereBurn$nhdplusv2_comid))
+# head(colorSevereBurn$yearBurn)
 
 colorModtoSevereBurn<-left_join(MTBS_moderate,srCor_comid_NAfree,by="nhdplusv2_comid") %>%
   drop_na(dWL) 
 #How many unique lakes?
-length(unique(colorModtoSevereBurn$nhdplusv2_comid))
+# length(unique(colorModtoSevereBurn$nhdplusv2_comid))
+
+colorNoBurn<-left_join(MTBS_noburn,srCor_comid_NAfree,by="nhdplusv2_comid") %>%
+  drop_na(dWL) 
+#How many unique lakes?
+# length(unique(colorNoBurn$nhdplusv2_comid))
+
+
+## Randomly select 500 lakes that never burn, ever ever.
+grouped <- colorNoBurn %>%
+  tibble::add_column(group_index = group_indices(.)) 
+
+unique_groups <- unique(group_indices(grouped))
+sampled_groups <- sample(unique_groups, 500)
+sampled_groups
+
+colorNoBurn_subset <- colorNoBurn %>% 
+  ungroup() %>%
+  filter(group_indices(grouped) %in% sampled_groups)
+
+colorNoBurn_subset %>%
+  distinct(nhdplusv2_comid)
+
 
 save(colorSevereBurn, colorModtoSevereBurn, MTBS_moderate, MTBS_severe, MTBS_long, file = 'data_export/rbeast_data.RData')
+save(colorNoBurn, colorNoBurn_subset, file="data_export/noBurn.RData")
+
+# write_feather(colorNoBurn_subset, "data_export/colorNoBurn_subset.feather")
 ```
 
 ```{r}
-load('fire-color/data_export/rbeast_data.RData')
-# load('data_export/rbeast_data.RData')
+# load('fire-color/data_export/rbeast_data.RData')
+# load('fire-color/data_export/noBurn.RData')
+
+
+load('data_export/rbeast_data.RData')
+load('data_export/noBurn.RData')
 ```
 
 ```{r}
@@ -1480,241 +1516,6 @@ For now, I think I will focus more of my attention to the trend changepoint data
 
 I'll get back to that, but first let's expand our analysis to more lakes with less severe fires. 
 
-# BEAST model (>25% burn)
-
-Here I am going to run the model and include any lake that burned >= 25% of the local catchment.
-```{r, echo=TRUE,  results=FALSE, message=FALSE, warning=FALSE, class.source = 'fold-show'}
-
-colorModtoSevereBurn_trim <- colorModtoSevereBurn %>%
-  mutate(
-    month = month(date),
-    year = year(date),
-    doy = yday(date),
-    yearBurn = ymd(sprintf("%d-07-01", as.numeric(
-      as.character(yearBurn)
-    )))
-  ) %>%
-  mutate(dWL = replace(dWL, dWL < 470, NA),
-         dWL = replace(dWL, dWL > 583, NA)) %>%
-  drop_na(dWL) %>%
-  group_by(nhdplusv2_comid, year) %>%
-  group_by(nhdplusv2_comid) %>%
-  mutate(fire_period = case_when(date <= yearBurn ~ "pre_fire",
-                                 date > yearBurn ~ "post_fire")) %>%
-  group_by(nhdplusv2_comid, fire_period) %>%
-  mutate(unique_years = n_distinct(year)) %>%
-  group_by(nhdplusv2_comid) %>%
-  mutate(pre_and_post = length(unique(fire_period))) %>%
-  filter(pre_and_post == 2) %>% #require both pre- and post-fire data
-  pivot_wider(
-    names_from = "fire_period",
-    values_from = "unique_years",
-    names_prefix = "years_",
-    values_fn = mean
-  ) %>% #Need to add values_fn to suppress duplicates warning
-  unnest(c(years_post_fire, years_pre_fire)) %>%
-  group_by(nhdplusv2_comid) %>%
-  filter(min(years_pre_fire, na.rm = TRUE) >= 5 &
-           min(years_post_fire, na.rm = TRUE) >= 5) %>%
-  select(
-    nhdplusv2_comid,
-    yearBurn,
-    date,
-    year,
-    month,
-    doy,
-    dWL,
-    pre_and_post,
-    years_post_fire,
-    years_pre_fire
-  ) %>%
-  ungroup()
-```
-We have `r length(unique(colorModtoSevereBurn_trim$nhdplusv2_comid))` lakes to start with this time. 
-
-```{r, echo=TRUE,  results=FALSE, message=FALSE, warning=FALSE}
-
-start_time <- Sys.time()
-set.seed(1111)
-nested_beast <- colorModtoSevereBurn_trim %>%
-  as_tibble() %>%
-  ungroup() %>%
-  arrange(date) %>%
-  group_by(year, month, nhdplusv2_comid) %>%
-  distinct(date, .keep_all = TRUE) %>%
-  summarize(median = median(dWL, na.rm = TRUE)) %>%
-  na.trim() %>%
-  ungroup() %>%
-  group_by(nhdplusv2_comid) %>%
-  transmute(date = ymd(paste(year, month, "01", sep = "-")),
-            dWL = median) %>%
-  mutate(yearmonth = yearmonth(date)) %>% #need to index by yearmonth
-  as_tsibble(., key = nhdplusv2_comid, index = yearmonth) %>% #time series tibble
-  fill_gaps() %>% #makes the missing data implicit
-  select(-date) %>%
-  mutate(date = as.Date(yearmonth)) %>%
-  as_tibble() %>%
-  select(-yearmonth) %>%
-  group_by(nhdplusv2_comid) %>%
-  nest() %>%
-  # filter(nhdplusv2_comid=="20328576")%>%
-  mutate(
-    beast = purrr::map(data, map_beast),
-    tcps = purrr::map(beast, map_tcps),
-    scps = purrr::map(beast, map_scps),
-    pred_tcps = purrr::map(beast, map_pred_tcps),
-    pred_scps = purrr::map(beast, map_pred_scps)
-  ) %>%
-  select(-beast)
-end_time <- Sys.time()
-```
-
-The model takes a bit longer to run this time of course, at about `r round(end_time - start_time,1)` minutes.
-
-### How many lakes have a changepoint shortly after the fire?
-
-Here I am using the most strict criteria from above, where we are only considering trend changepoints where the CI spans the year of the fire, but the estimated trend changepoint date occurs within 5 years **after** the fire. 
-
-```{r, class.source = 'fold-show'}
-fire_trend_changes_strict <- nested_beast %>%
-  select(nhdplusv2_comid, tcps) %>%
-  unnest(tcps) %>%
-  left_join(., MTBS_moderate %>%
-              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") %>%
-  mutate(yearBurn = as.numeric(as.character(yearBurn))) %>%
-  group_by(nhdplusv2_comid, tcp_Date) %>%
-  mutate(
-    fire_cp = case_when(
-      tcp_CI_low <= yearBurn &
-        tcp_CI_high >= yearBurn &
-          tcp_Date >= yearBurn &
-            abs(yearBurn-tcp_Date)<= 5~ 'fire change',
-      TRUE ~ "change not associated with fire"
-    )
-  )
-
-counts <- fire_trend_changes_strict %>%
-  filter(fire_cp == "fire change") %>%
-  ungroup() %>%
-  add_count(cpPR > 0.5) %>%
-  group_by(`cpPR > 0.5`) %>%
-  summarize(n = length(unique(nhdplusv2_comid)))
-```
-
-```{r}
-fire_trend_changes_strict %>%
-  filter(fire_cp=="fire change") %>%
-  ungroup()%>%
-  add_count(cpPR>0.5) %>%
-  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
-  ggplot(aes(x=fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), y=cpPR))+
-  geom_hline(yintercept=0.5, color="pink", linetype="dashed")+
-  geom_bar(stat="identity",  color="black", width=0.75)+
-  geom_text(aes(label=round(cpPR,2)), vjust=-1  , hjust=-0.2, size=3, angle=45) +
-  labs(y="Trend changepoint occurance probability",
-       x="COMID")
-counts <- fire_trend_changes_strict %>%
-  filter(fire_cp == "fire change") %>%
-  ungroup() %>%
-  add_count(cpPR > 0.5) %>%
-  group_by(`cpPR > 0.5`) %>%
-  summarize(n = length(unique(nhdplusv2_comid)))
-
-```
-
-For `r sum(counts0$n)` lakes, the confidence intervals on the trend changepoint encompass the year of the watershed burn. For `r counts%>%pluck(2,2)` of those lakes, the probability is quite high (>0.5). So approximately `r round(sum(counts0$n)/length(unique(colorModtoSevereBurn_trim$nhdplusv2_comid)),2)*100`% of the lakes show a color change in response to fire. 
-
-It seems like by adding more sites (by considering less widespread burns), we don't end up capturing more lake color changes. 
-
-A look at the lakes that burned >25% of the watershed area and experienced a change in DWL.
-
-```{r}
-firetrendlakesstrict<-fire_trend_changes_strict %>%
-           filter(fire_cp=="fire change")
-
-nested_beast %>%
-  unnest(c(data)) %>%
-  filter(nhdplusv2_comid %in% firetrendlakesstrict$nhdplusv2_comid) %>%
-  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
-  inner_join(., MTBS_moderate %>%
-              select(nhdplusv2_comid, yearBurn), by="nhdplusv2_comid") %>%
-  left_join(., firetrendlakesstrict %>% select(nhdplusv2_comid, cpPR, fire_cp)) %>%
-  left_join(fui.lookup) %>%
-  left_join(fui.colors) %>%
-  mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y"))%>%
-  ggplot()+
-  #Add confidence intervals around changepoint
-  geom_rect(data= nested_beast %>%
-                  unnest(c(tcps)) %>%
-                  filter(tcp_CI_low %in% firetrendlakesstrict$tcp_CI_low),
-  aes(xmin = tcp_CI_low, xmax = tcp_CI_high, ymin = -Inf, ymax = Inf),
-      color = "pink", fill = "pink")+
-  #Points for raw dWL
-  geom_point(aes(x=decimal_date(date), y=dWL,color=color), alpha=0.8, size=1)+
-  scale_color_identity() +
-  #Add vertical line for year of burn
-  geom_vline(aes(xintercept = decimal_date(yearBurn)), 
-                color = "red", size=0.5)+
-  #Add vertical line for exact trend changepoint
-  geom_vline(data= nested_beast %>%
-               unnest(c(tcps)) %>%
-                filter(tcp_CI_low %in% firetrendlakesstrict$tcp_CI_low),
-  aes(xintercept = decimal_date(as.Date(as.character(tcp_Date), format = "%Y"))), 
-                linetype="dashed", size=0.5)+
-  #Add the cpPR on each panel
-  geom_richtext(data=firetrendlakesstrict,
-                  aes(x = -Inf, y = Inf, hjust=-0.1, vjust=1.5,label= paste0("cpPR=", round(cpPR,1))),
-                stat = "unique", color="black", fill="#f9dcc4", size=2)+
-  facet_wrap(~fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), scales="free_y")+
-  theme(strip.text.x = element_textbox(size=10,fill = "grey40", box.color = "#000000"))+
-  labs(y="Observed dominant wavelength (nm)",
-       x="Year",
-       title="MOST strict criteria for lakes with a detected trend changepoint post-fire")+
-  cowplot::panel_border() +
-  cowplot::background_grid()
-
-```
-
-### Why do lakes change?
-
-Is there a relationship between % watershed burn and changepoint probability? In other words, does the probability of a trend change in color **increase** as watershed burn area increase? Are smaller lakes more likely to experince a trend change?
-
-```{r, fig.width=8,fig.height=3}
-lakeCat <- readRDS("~/Dropbox/dropbox Research/fire-color/data_export/lakeCat.rds")
-
-
-firetrends_corr <- firetrendlakesstrict %>%
-  ungroup()%>%
-  inner_join(lakeCat) %>%
-  select(cpPR, yearBurn, CatAreaSqKm, WsAreaSqKm, lake_lat_decdeg, lake_lon_decdeg,
-         lake_totalarea_ha, lake_perimeter_m,
-         lake_elevation_m, SlopeCat, WetIndexCat) %>%
-  mutate(CALA=(CatAreaSqKm*100)/lake_totalarea_ha,
-         WALA=(WsAreaSqKm*100)/lake_totalarea_ha) 
-
-firetrendlakesstrict %>%
-  inner_join(., MTBS_moderate %>% select(-yearBurn), by="nhdplusv2_comid") %>%
-  rename(perc_burn=value) %>%
-  ggplot(aes(x=perc_burn,y=cpPR))+
-  geom_point(size=3)+
-  labs(x="% watershed burn") +
-
-firetrendlakesstrict %>%
-  inner_join(., MTBS_moderate %>% select(-yearBurn), by="nhdplusv2_comid") %>%
-  rename(perc_burn=value) %>%
-  ggplot(aes(x=log10(lake_totalarea_ha),y=cpPR))+
-  geom_point(size=3)+
-  labs(x="Lake surface area (log10 ha)")
-```
-
-Is cpPR correlated with anything??
-
-```{r}
-library("PerformanceAnalytics")
-firetrends_corr_NAfree<-firetrends_corr %>% drop_na()
-chart.Correlation(firetrends_corr, histogram=TRUE, pch=19)
-```
-
 
 # BEAST truncated timeseries
 
@@ -1876,11 +1677,13 @@ n_tcps%>%
 
 ### Do any of the trend changepoint confidence intervals span the year of the fire?
 
-Here I'm using the following criteria (post-meeting with Sarah 2022-02-08)
+Here I'm using the following criteria (post-meeting with Sarah 2022-02-08) and some exploration on my own:
 
-- 95% credible intervals must span the year of the burn
+- The high end of the 95% credible intervals must be within 5 years (inclusive) of the burn
 - The trend changepoint can be up to 1 year prior to the burn AND
 - The trend changepoint date cannot be no more than 5 years **past** the year of the burn.
+
+I re-ran the calculation for the full timeseries just to make sure we are comparing apples to apples. 
 
 ```{r, class.source = 'fold-show'}
 
@@ -1932,18 +1735,52 @@ fire_trend_changes_full <- nested_beast %>%
 ```
 
 ```{r}
+
 fire_trend_changes_truncated %>%
   filter(fire_cp=="fire change") %>%
   ungroup()%>%
   add_count(cpPR>0.5) %>%
-  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
-  ggplot(aes(x=fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), y=cpPR))+
+  group_by(nhdplusv2_comid) %>%
+  mutate(changepoint_number = row_number()) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)),
+         changepoint_number=as.factor(as.numeric(changepoint_number)))%>%
+  ggplot(aes(x=fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), y=cpPR, fill=changepoint_number))+
   geom_hline(yintercept=0.5, color="pink", linetype="dashed")+
-  geom_bar(stat="identity",  color="black", width=0.75)+
-  geom_text(aes(label=round(cpPR,2)), vjust=-1  , hjust=-0.2, size=3, angle=45) +
+  geom_bar(stat="identity", position="dodge", color="black", width=0.75)+
+  # geom_text(aes(label=round(cpPR,2)), vjust=-1  , hjust=-0.2, size=3, angle=45) +
   labs(y="Trend changepoint occurance probability",
-       x="COMID")
+       x="COMID",
+       title="Truncated timeseries")+
+  scale_fill_manual(values=c("grey20","grey40","grey70","grey90"))
+
+
 counts_truncated <- fire_trend_changes_truncated %>%
+  filter(fire_cp == "fire change") %>%
+  ungroup() %>%
+  add_count(cpPR > 0.5) %>%
+  group_by(`cpPR > 0.5`) %>%
+  summarize(n = length(unique(nhdplusv2_comid)))
+
+
+fire_trend_changes_full %>%
+  filter(fire_cp=="fire change") %>%
+  ungroup()%>%
+  add_count(cpPR>0.5) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(changepoint_number = row_number()) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)),
+         changepoint_number=as.factor(as.numeric(changepoint_number)))%>%
+  ggplot(aes(x=fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), y=cpPR, fill=changepoint_number))+
+  geom_hline(yintercept=0.5, color="pink", linetype="dashed")+
+  geom_bar(stat="identity", position="dodge", color="black", width=0.75)+
+  # geom_text(aes(label=round(cpPR,2)), vjust=-1  , hjust=-0.2, size=3, angle=45) +
+  labs(y="Trend changepoint occurance probability",
+       x="COMID",
+       title="Full timeseries")+
+  scale_fill_manual(values=c("grey20","grey40","grey70","grey90"))
+
+
+counts_full <- fire_trend_changes_full %>%
   filter(fire_cp == "fire change") %>%
   ungroup() %>%
   add_count(cpPR > 0.5) %>%
@@ -1952,20 +1789,12 @@ counts_truncated <- fire_trend_changes_truncated %>%
 
 ```
 
-Yes! For `r sum(counts_truncated$n)` lakes, the confidence intervals on the trend changepoint encompass the year of the watershed burn. For `r counts_truncated%>%pluck(2,2)` of those lakes, the probability is quite high (>0.5). So approximately `r round(sum(counts_truncated$n)/length(unique(colorSevereBurn_trim$nhdplusv2_comid)),2)*100`% of the lakes show a color change in response to fire. Here's a distribution of the changepoint probabilities: 
+**With the truncated dataset:** For `r sum(counts_truncated$n)` lakes, we detect as least *one* changepoint within 5 years of the burn, but as you can see from the barplot above, sometimes there are up to 4 changepoints during that period. For `r counts_truncated%>%pluck(2,2)` of those lakes, the probability of one of the changepoints is quite high (>0.5). Using the truncated dataset, `r round(sum(counts_truncated$n)/length(unique(colorSevereBurn_trim$nhdplusv2_comid)),2)*100`% of the lakes show a color change in response to fire. 
 
-```{r,  fig.width=3,fig.height=2}
-fire_trend_changes_truncated %>%
-  filter(fire_cp=="fire change")%>%
-  ggplot(aes(x=cpPR)) + 
-  geom_histogram(colour="black", fill="white")+
-  cowplot::theme_half_open()+
-  labs(x="Changepoint probability")
-```
+**With the full dataset:** For `r sum(counts_full$n)` lakes, we detect as least *one* changepoint within 5 years of the burn, and there are also sometimes multiple changepoints within that 5 year period. For `r counts_full%>%pluck(2,2)` of those lakes, the probability of one of the changepoints is quite high (>0.5). Using the full dataset, `r round(sum(counts_full$n)/length(unique(colorSevereBurn_trim$nhdplusv2_comid)),2)*100`% of the lakes show a color change in response to fire. 
 
-So compared to the full timeseries, when we use the truncated dataset we have a simmilar number of high probability lakes, but we end up having a lot more sites with low probability. This makes me think that it is actually advantageous to use the FULL timeseries to inform whether or not there is a trend changepoint.
 
-#### Graph all sites
+#### Graph all sites in the truncated set
 ```{r}
 
 firetrendlakes_truncated<-fire_trend_changes_truncated %>%
@@ -2013,86 +1842,11 @@ nested_beast_truncated %>%
   cowplot::background_grid()
 ```
 
-#### Closer look at 12394530
-
-The tcp still occurs prior to the fire. The tcp date is `r firetrendlakes_truncated %>% filter(nhdplusv2_comid == "12394530") %>% pull(tcp_Date)` while the burn date is `r firetrendlakes_truncated %>% filter(nhdplusv2_comid == "12394530") %>% pull(yearBurn)` so it is pretty damn close.
-
-```{r}
-
-  firetrendlakes_truncated %>%
-    filter(nhdplusv2_comid == "12394530") %>%
-    left_join(
-      .,
-      nested_beast_truncated %>%
-        select(nhdplusv2_comid, data) %>%
-        unnest(c(data)) %>%
-        filter(nhdplusv2_comid == "12394530")
-    ) %>%
-    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
-    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
-    ggplot(aes(y = dWL, x = date)) +
-    geom_rect(
-      aes(
-        xmin = as.Date(tcp_CI_low),
-        xmax = as.Date(tcp_CI_high),
-        ymin = -Inf,
-        ymax = Inf
-      ),
-      color = "pink",
-      fill = "pink"
-    )+
-  #Add vertical line for year of burn
-  geom_vline(aes(xintercept = yearBurn),
-             color = "red",
-             size = 0.5) +
-    #Add vertical line for exact trend changepoint
-    geom_vline(aes(xintercept = as.Date(tcp_Date)),
-               linetype = "dashed",
-               size = 0.5) +
-      #Add confidence intervals around the dwl trend
-  geom_ribbon(data = nested_beast_truncated %>%
-      select(nhdplusv2_comid, pred_tcps) %>%
-      unnest(c(pred_tcps)) %>%
-      filter(nhdplusv2_comid %in% c("12394530")),
-      aes(
-    ymin = (dWL_pred_CI_low),
-    ymax = (dWL_pred_CI_high),
-    x = as.Date(date_dec)
-  ),
-  inherit.aes = FALSE,
-  fill = "grey50") +
-    #Add line for predicted dwl trend
-  geom_line(
-    data = nested_beast_truncated %>%
-      select(nhdplusv2_comid, pred_tcps) %>%
-      unnest(c(pred_tcps)) %>%
-      filter(nhdplusv2_comid %in% c("12394530")),
-    aes(x = as.Date(date_dec), y = dWL_pred)
-  ) +
-    #Raw data
-        geom_point()+
-    facet_wrap(~nhdplusv2_comid)
-```
 
 ### Compare to full timeseries results
 ```{r}
 ## Summary for full timeseries
-full_timeseries <-nested_beast %>%
-  select(nhdplusv2_comid, tcps) %>%
-  unnest(tcps) %>%
-  left_join(., MTBS_severe %>%
-              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") %>%
-  # mutate(yearBurn = as.numeric(as.character(yearBurn))) %>%
-  mutate(yearBurn=decimal_date(ymd(sprintf("%d-07-01", as.numeric(as.character(yearBurn))))))%>%
-  group_by(nhdplusv2_comid, tcp_Date) %>%
-  mutate(
-    fire_cp = case_when(
-      tcp_CI_low <= yearBurn & tcp_CI_high >= yearBurn & #Make sure tcp CI surround yearBurn
-          tcp_Date >= yearBurn-1 & #tcp_Date can be up to 1 year before yearBurn
-            abs(yearBurn-tcp_Date)<= 5~ 'fire change', #BUT no more than 5 years PAST yearBurn
-      TRUE ~ "change not associated with fire"
-    )
-  ) %>%
+full_timeseries<- fire_trend_changes_full %>%
   filter(fire_cp=="fire change") %>%
   ungroup()%>%
   mutate(CI_span_full=tcp_CI_high-tcp_CI_low) %>%
@@ -2144,6 +1898,10 @@ joined_timeseries%>%
        title="Truncated timeseries")
 ```
 
+So compared to the full timeseries, when we use the truncated dataset we have a similar number of high probability lakes, but we end up having a lot more sites with low probability. The total number of breakpoints detected is `r nrow(fire_trend_changes_truncated%>%filter(fire_cp=="fire change"))` in the truncated timeseries compared to `r nrow(fire_trend_changes_full%>%filter(fire_cp=="fire change"))` in the full timeseries.
+
+The truncated timeseries appears to be more sensitive than the full timeseries in detecting changepoints, but the full timeseries detected a greater number of high probability changepoints. This makes me think that it is actually advantageous to use the FULL timeseries to inform whether or not there is a trend changepoint. 
+
 *How do the boxplots of probabilities compare?*
 But we also have a few more low probability sites that bring down the mean & median cpPR.  
 ```{r,  fig.width=6,fig.height=3}
@@ -2161,7 +1919,8 @@ joined_timeseries%>%
 ```
 
 *Are the probabilities of changepoints in the common lakes similar?*
-Black line is 1:1 line. Generally pretty highly correlated but there are some cases where the probability of changepoint is quite high in the full dataset, but pretty low in the truncated dataset (e.g., COMID 23933952)
+Black line is 1:1 line. The answer is very soundly... no. 
+
 ```{r}
 joined_timeseries%>%
   ggplot(aes(x=cpPR_trun, y=cpPR_full)) + 
@@ -2184,7 +1943,8 @@ joined_timeseries%>%
   ggplot(aes(x=CI_span_trun)) + 
   geom_histogram(colour="black", fill="#ef476f")+
   labs(x="Width of 95% CI (years)",
-       title="Truncated timeseries") 
+       title="Truncated timeseries") +
+  scale_x_continuous(limits=c(0,8))
 
 joined_timeseries%>%
   select(nhdplusv2_comid, CI_span_full, CI_span_trun) %>%
@@ -2200,7 +1960,7 @@ joined_timeseries%>%
 ```
 
 *In general, is cpPR correlated with 95% CI span?*
-NO in the full timeseries, YES in the truncated timeseries. 
+NO in the full timeseries, generally YES in the truncated timeseries. 
 ```{r}
 joined_timeseries%>%
   ggplot(aes(x=CI_span_full, y=cpPR_full)) + 
@@ -2209,13 +1969,15 @@ joined_timeseries%>%
        y="Trend changepoint probability (cpPR)",
        title="Full timeseries")+
   expand_limits(x = 0, y = 0)+
+  geom_smooth(method="lm", se=F, color="#118ab2")+
 joined_timeseries%>%
   ggplot(aes(x=CI_span_trun, y=cpPR_trun)) + 
   geom_point(shape=21, colour="black", fill="#ef476f", size=3)+
   labs(x="Width of 95% CI (years)",
        y="Trend changepoint probability (cpPR)",
        title="Truncated timeseries") +
-  expand_limits(x = 0, y = 0)
+  expand_limits(x = 0, y = 0)+
+  geom_smooth(method="lm", se=F, color="#ef476f")
 ```
 
 *For lakes that turn up in the truncated timeseries but not full timeseries, how do their cpPRs look?*
@@ -2226,27 +1988,32 @@ anti_join_sites <- joined_timeseries %>%
   filter(is.na(cpPR_full))
 
 anti_join_sites%>%
-  ggplot(aes(x=fct_reorder(nhdplusv2_comid, cpPR_trun, .desc= TRUE), y=cpPR_trun))+
+  group_by(nhdplusv2_comid) %>%
+  mutate(changepoint_number = row_number()) %>%
+  ggplot(aes(x=fct_reorder(nhdplusv2_comid, cpPR_trun, .desc= TRUE), y=cpPR_trun, group=changepoint_number))+
   geom_hline(yintercept=0.5, color="pink", linetype="dashed")+
-  geom_bar(stat="identity",  color="black", width=0.75)+
-  geom_text(aes(label=round(cpPR_trun,2)), vjust=-1  , hjust=-0.2, size=3, angle=45) +
+  geom_bar(stat="identity", position="dodge", color="black", width=0.75)+
+  # geom_text(aes(label=round(cpPR_trun,2)), vjust=-1  , hjust=-0.2, size=3, angle=45) +
   labs(y="Trend changepoint occurance probability",
        x="COMID",
        title="Truncated dataset")
 ```
 
-Let's zoom in on those two sites
+#### Slipped through the cracks-
+
+Let's zoom in on those that one site with an occurance probability of 0.71
 
 ```{r}
 
+
   firetrendlakes_truncated %>%
-    filter(nhdplusv2_comid %in% c("20328576","8014761")) %>%
+    filter(nhdplusv2_comid %in% c("23703787")) %>%
     left_join(
       .,
       nested_beast_truncated %>%
         select(nhdplusv2_comid, data) %>%
         unnest(c(data)) %>%
-        filter(nhdplusv2_comid %in% c("20328576","8014761"))
+        filter(nhdplusv2_comid %in% c("23703787"))
     ) %>%
     mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
     mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
@@ -2273,7 +2040,7 @@ Let's zoom in on those two sites
   geom_ribbon(data = nested_beast_truncated %>%
       select(nhdplusv2_comid, pred_tcps) %>%
       unnest(c(pred_tcps)) %>%
-      filter(nhdplusv2_comid %in% c("20328576","8014761")),
+      filter(nhdplusv2_comid %in% c("23703787")),
       aes(
     ymin = (dWL_pred_CI_low),
     ymax = (dWL_pred_CI_high),
@@ -2286,7 +2053,7 @@ Let's zoom in on those two sites
     data = nested_beast_truncated %>%
       select(nhdplusv2_comid, pred_tcps) %>%
       unnest(c(pred_tcps)) %>%
-      filter(nhdplusv2_comid %in% c("20328576","8014761")),
+      filter(nhdplusv2_comid %in% c("23703787")),
     aes(x = as.Date(date_dec), y = dWL_pred)
   ) +
     #Raw data
@@ -2294,4 +2061,1073 @@ Let's zoom in on those two sites
     facet_wrap(~nhdplusv2_comid, scale="free_x")
 ```
 
-The reason these two lakes slip between the cracks is because the changepoint occurs within 5 years of the fire but the confidence intervals don't overlap the year of the fire. 
+At least the first changepoiint looks pretty apparently. How does it look in the full timeseries model? 
+
+```{r}
+
+firetrendlakes_full<-fire_trend_changes_full 
+
+firetrendlakes_full %>%
+    filter(nhdplusv2_comid %in% c("23703787")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("23703787"))
+    ) %>%
+    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+    geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("23703787")),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("23703787")),
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    #Raw data
+        geom_point()+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")
+```
+
+Ahh, seeing the full timeseries with all the changepoints and their confidence intervals really highlights how the length of the timeseries can influence the changepoint analysis. With the way the truncated dataset was up, it made the fluctuations in dwl a bit more dramatic than they really are. In the changepoint that has confidence intervals spanning the fire, in the model on the full timeseries this confidence interval is very wide and the changepoint occurance probability is kind of low (0.32). 
+
+## Conclusion
+
+I don't think we want to use a truncated timeserise. Although there is overlap in some lakes, it seems like the answers are different enough and the truncated timeseries analysis a little **too** sensitive to picking up changes post-fire. 
+
+
+?# BEAST model (>25% burn)
+
+Here I am going to run the model and include any lake that burned >= 25% of the local catchment.
+```{r, echo=TRUE,  results=FALSE, message=FALSE, warning=FALSE, class.source = 'fold-show'}
+
+colorModtoSevereBurn_trim <- colorModtoSevereBurn %>%
+  mutate(
+    month = month(date),
+    year = year(date),
+    doy = yday(date),
+    yearBurn = ymd(sprintf("%d-07-01", as.numeric(
+      as.character(yearBurn)
+    )))
+  ) %>%
+  mutate(dWL = replace(dWL, dWL < 470, NA),
+         dWL = replace(dWL, dWL > 583, NA)) %>%
+  drop_na(dWL) %>%
+  group_by(nhdplusv2_comid, year) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(fire_period = case_when(date <= yearBurn ~ "pre_fire",
+                                 date > yearBurn ~ "post_fire")) %>%
+  group_by(nhdplusv2_comid, fire_period) %>%
+  mutate(unique_years = n_distinct(year)) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(pre_and_post = length(unique(fire_period))) %>%
+  filter(pre_and_post == 2) %>% #require both pre- and post-fire data
+  pivot_wider(
+    names_from = "fire_period",
+    values_from = "unique_years",
+    names_prefix = "years_",
+    values_fn = mean
+  ) %>% #Need to add values_fn to suppress duplicates warning
+  unnest(c(years_post_fire, years_pre_fire)) %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(min(years_pre_fire, na.rm = TRUE) >= 5 &
+           min(years_post_fire, na.rm = TRUE) >= 5) %>%
+  select(
+    nhdplusv2_comid,
+    yearBurn,
+    date,
+    year,
+    month,
+    doy,
+    dWL,
+    pre_and_post,
+    years_post_fire,
+    years_pre_fire
+  ) %>%
+  ungroup()
+```
+We have `r length(unique(colorModtoSevereBurn_trim$nhdplusv2_comid))` lakes to start with this time. 
+
+```{r, echo=TRUE,  results=FALSE, message=FALSE, warning=FALSE}
+
+start_time <- Sys.time()
+set.seed(1111)
+nested_beast <- colorModtoSevereBurn_trim %>%
+  as_tibble() %>%
+  ungroup() %>%
+  arrange(date) %>%
+  group_by(year, month, nhdplusv2_comid) %>%
+  distinct(date, .keep_all = TRUE) %>%
+  summarize(median = median(dWL, na.rm = TRUE)) %>%
+  na.trim() %>%
+  ungroup() %>%
+  group_by(nhdplusv2_comid) %>%
+  transmute(date = ymd(paste(year, month, "01", sep = "-")),
+            dWL = median) %>%
+  mutate(yearmonth = yearmonth(date)) %>% #need to index by yearmonth
+  as_tsibble(., key = nhdplusv2_comid, index = yearmonth) %>% #time series tibble
+  fill_gaps() %>% #makes the missing data implicit
+  select(-date) %>%
+  mutate(date = as.Date(yearmonth)) %>%
+  as_tibble() %>%
+  select(-yearmonth) %>%
+  group_by(nhdplusv2_comid) %>%
+  nest() %>%
+  # filter(nhdplusv2_comid=="20328576")%>%
+  mutate(
+    beast = purrr::map(data, map_beast),
+    tcps = purrr::map(beast, map_tcps),
+    scps = purrr::map(beast, map_scps),
+    pred_tcps = purrr::map(beast, map_pred_tcps),
+    pred_scps = purrr::map(beast, map_pred_scps)
+  ) %>%
+  select(-beast)
+end_time <- Sys.time()
+```
+
+The model takes a bit longer to run this time of course, at about `r round(end_time - start_time,1)` minutes.
+
+### How many lakes have a changepoint shortly after the fire?
+
+Here I am using the following criteria:
+
+- The high end of the 95% credible intervals must be within 5 years (inclusive) of the burn
+- The trend changepoint can be up to 1 year prior to the burn AND
+- The trend changepoint date cannot be no more than 5 years **past** the year of the burn.
+
+
+```{r, class.source = 'fold-show'}
+fire_trend_changes_strict <- nested_beast %>%
+  select(nhdplusv2_comid, tcps) %>%
+  unnest(tcps) %>%
+  left_join(., MTBS_moderate %>%
+              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") %>%
+  mutate(yearBurn = as.numeric(as.character(yearBurn))) %>%
+  group_by(nhdplusv2_comid, tcp_Date) %>%
+    mutate(
+    fire_cp = case_when(
+      # tcp_CI_low <= yearBurn & tcp_CI_high >= yearBurn & #Make sure tcp CI surround yearBurn
+      tcp_CI_high - yearBurn <= 5 &
+        #Make sure the upper bound of the tcp is within 5 years of the burn
+        tcp_Date >= yearBurn - 1 &
+        #tcp_Date can be up to 1 year before yearBurn
+        abs(yearBurn - tcp_Date) <= 5 ~ 'fire change',
+      #BUT no more than 5 years PAST yearBurn
+      TRUE ~ "change not associated with fire"
+    )
+  )
+
+counts <- fire_trend_changes_strict %>%
+  filter(fire_cp == "fire change") %>%
+  ungroup() %>%
+  add_count(cpPR > 0.5) %>%
+  group_by(`cpPR > 0.5`) %>%
+  summarize(n = length(unique(nhdplusv2_comid)))
+```
+
+```{r}
+fire_trend_changes_strict %>%
+  filter(fire_cp=="fire change") %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(changepoint_number = row_number()) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)),
+         changepoint_number=as.factor(as.numeric(changepoint_number)))%>%
+  ggplot(aes(x=fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), y=cpPR, fill=changepoint_number))+
+  geom_hline(yintercept=0.5, color="pink", linetype="dashed")+
+  geom_bar(stat="identity", position="dodge",  color="black", width=0.75)+
+  # geom_text(aes(label=round(cpPR,2)), vjust=-1  , hjust=-0.2, size=3, angle=45) +
+  labs(y="Trend changepoint occurance probability",
+       x="COMID",
+       title="Lakes that burned > 25% of the watershed")+
+    scale_fill_manual(values=c("grey20","grey40","grey70","grey90"))+
+  theme(legend.position="bottom")
+
+```
+
+For `r sum(counts$n)` lakes, we detect at least one changepoint within 5 years of the fire. For `r counts%>%pluck(2,2)` of those lakes, the probability is quite high (>0.5). So approximately `r round(sum(counts$n)/length(unique(colorModtoSevereBurn_trim$nhdplusv2_comid)),2)*100`% of the lakes show a color change in response to fire. 
+
+A look at the lakes that burned >25% of the watershed area and experienced a change in DWL.
+
+```{r}
+firetrendlakesstrict<-fire_trend_changes_strict %>%
+           filter(fire_cp=="fire change")
+
+nested_beast %>%
+  unnest(c(data)) %>%
+  filter(nhdplusv2_comid %in% firetrendlakesstrict$nhdplusv2_comid) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
+  inner_join(., MTBS_moderate %>%
+              select(nhdplusv2_comid, yearBurn), by="nhdplusv2_comid") %>%
+  left_join(., firetrendlakesstrict %>% select(nhdplusv2_comid, cpPR, fire_cp)) %>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y"))%>%
+  ggplot()+
+  #Add confidence intervals around changepoint
+  geom_rect(data= nested_beast %>%
+                  unnest(c(tcps)) %>%
+                  filter(tcp_CI_low %in% firetrendlakesstrict$tcp_CI_low),
+  aes(xmin = tcp_CI_low, xmax = tcp_CI_high, ymin = -Inf, ymax = Inf),
+      color = "pink", fill = "pink")+
+  #Points for raw dWL
+  geom_point(aes(x=decimal_date(date), y=dWL,color=color), alpha=0.8, size=1)+
+  scale_color_identity() +
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = decimal_date(yearBurn)), 
+                color = "red", size=0.5)+
+  #Add vertical line for exact trend changepoint
+  geom_vline(data= nested_beast %>%
+               unnest(c(tcps)) %>%
+                filter(tcp_CI_low %in% firetrendlakesstrict$tcp_CI_low),
+  aes(xintercept = decimal_date(as.Date(as.character(tcp_Date), format = "%Y"))), 
+                linetype="dashed", size=0.5)+
+  #Add the cpPR on each panel
+  geom_richtext(data=firetrendlakesstrict,
+                  aes(x = -Inf, y = Inf, hjust=-0.1, vjust=1.5,label= paste0("cpPR=", round(cpPR,1))),
+                stat = "unique", color="black", fill="#f9dcc4", size=2)+
+  facet_wrap(~fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), scales="free_y")+
+  theme(strip.text.x = element_textbox(size=10,fill = "grey40", box.color = "#000000"))+
+  labs(y="Observed dominant wavelength (nm)",
+       x="Year",
+       title="Lakes that burned >25% of the watershed area")+
+  cowplot::panel_border() +
+  cowplot::background_grid()
+
+```
+
+### Lakes with multiple changepoints
+
+Let's look a little more closely at these sites
+
+```{r}
+
+  
+mcp_subset<-fire_trend_changes_strict %>%
+  filter(fire_cp=="fire change") %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(changepoint_number = row_number()) %>%
+  filter(!changepoint_number==1)
+
+nested_beast %>%
+  unnest(c(data)) %>%
+  filter(nhdplusv2_comid %in% mcp_subset$nhdplusv2_comid) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
+  inner_join(., MTBS_moderate %>%
+              select(nhdplusv2_comid, yearBurn), by="nhdplusv2_comid") %>%
+  left_join(., mcp_subset %>% select(nhdplusv2_comid, cpPR, fire_cp)) %>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y"))%>%
+  ggplot()+
+  #Add confidence intervals around changepoint
+  geom_rect(data= nested_beast %>%
+                  unnest(c(tcps)) %>%
+                  filter(tcp_CI_low %in% mcp_subset$tcp_CI_low),
+  aes(xmin = tcp_CI_low, xmax = tcp_CI_high, ymin = -Inf, ymax = Inf),
+      color = "pink", fill = "pink")+
+  #Points for raw dWL
+  geom_point(aes(x=decimal_date(date), y=dWL,color=color), alpha=0.8, size=1)+
+  scale_color_identity() +
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = decimal_date(yearBurn)), 
+                color = "red", size=0.5)+
+  #Add vertical line for exact trend changepoint
+  geom_vline(data= nested_beast %>%
+               unnest(c(tcps)) %>%
+                filter(tcp_CI_low %in% mcp_subset$tcp_CI_low),
+  aes(xintercept = decimal_date(as.Date(as.character(tcp_Date), format = "%Y"))), 
+                linetype="dashed", size=0.5)+
+  #Add the cpPR on each panel
+  # geom_richtext(data=mcp_subset,
+  #                 aes(x = -Inf, y = Inf, hjust=-0.1, vjust=1.5,label= paste0("cpPR=", round(cpPR,1))),
+  #               stat = "unique", color="black", fill="#f9dcc4", size=2)+
+  facet_wrap(~fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), scales="free_y")+
+  theme(strip.text.x = element_textbox(size=10,fill = "grey40", box.color = "#000000"))+
+  labs(y="Observed dominant wavelength (nm)",
+       x="Year",
+       title="Lakes that burned >25% of the watershed area",
+       subtitle="AND have multiple changepoints within 5 years of burn")+
+  cowplot::panel_border() +
+  cowplot::background_grid()
+```
+
+##### Closer look at a few more sites
+
+```{r}
+
+
+  fire_trend_changes_strict %>%
+    filter(nhdplusv2_comid %in% c("22971746")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("22971746"))
+    ) %>%
+    left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+    geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("22971746")),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("22971746")),
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_color_identity() +
+    #Raw data
+    geom_point(aes(color=color))+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")+
+  labs(title="Mud Lake, Montana (near Flathead, actually)")
+```
+
+For this lake the model detects two very high probability changepoints (>0.9) within 5 years of the burn. It looks like a sharp dip in dWL followed by a quick recovery. LAGOS-US classifies this as a natural lake but I wonder what would cause the lake to go suddenly, but temporarily, blue when it is generally a green lake? 
+
+```{r}
+
+
+  fire_trend_changes_strict %>%
+    filter(nhdplusv2_comid %in% c("14996973")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("14996973"))
+    ) %>%
+    left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+    geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("14996973")),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("14996973")),
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_color_identity() +
+    #Raw data
+    geom_point(aes(color=color))+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")+
+  labs(title="Stumpy Meadows Reservoir, Sierra Nevada California (east of Tahoe)")
+```
+
+Another case where there is a sudden change followed by a recovery. Not the first time this happened in the record of this lake, so it could very well have something to do with reservoir management, I suppose. 
+
+```{r}
+
+
+  fire_trend_changes_strict %>%
+    filter(nhdplusv2_comid %in% c("7914969")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("7914969"))
+    ) %>%
+    left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+    geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("7914969")),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("7914969")),
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_color_identity() +
+    #Raw data
+    geom_point(aes(color=color))+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")+
+  labs(title="Dog Lake (reservoir) just north of the CA border in OR")
+```
+
+In Dog Lake (reservoir) it's hard to tell but the confidence intervals on the two changepoints near the fire are almost overlapping, that's why it looks like one continuous block. Here's another lake that appears to shift into a greener state following the fire, with no indication of recovering.
+
+
+### Do any of the seasonal changepoint confidence intervals span the year of the fire?
+
+Trying this again with the revised criteria. 
+
+```{r, echo=TRUE,  out.width = '50%', out.height='50%'}
+
+fire_seasonal_changes <- nested_beast %>%
+  select(nhdplusv2_comid, scps) %>%
+  unnest(scps) %>%
+  left_join(., MTBS_severe %>%
+              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") %>%
+  mutate(yearBurn = as.numeric(as.character(yearBurn))) %>%
+  group_by(nhdplusv2_comid, scp_Date) %>%
+    mutate(
+    fire_scp = case_when(
+      # tcp_CI_low <= yearBurn & tcp_CI_high >= yearBurn & #Make sure tcp CI surround yearBurn
+      scp_CI_high - yearBurn <= 5 &
+        #Make sure the upper bound of the tcp is within 5 years of the burn
+        scp_Date >= yearBurn - 1 &
+        #tcp_Date can be up to 1 year before yearBurn
+        abs(yearBurn - scp_Date) <= 5 ~ 'fire change',
+      #BUT no more than 5 years PAST yearBurn
+      TRUE ~ "change not associated with fire"
+    )
+  )
+```
+
+```{r, echo=TRUE,  out.width = '50%', out.height='50%'}
+#How many lakes have a trend changepoint around the fire?
+fire_seasonal_changes %>%
+  filter(fire_scp=="fire change") %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(changepoint_number = row_number()) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)),
+         changepoint_number=as.factor(as.numeric(changepoint_number)))%>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
+  # fct_reorder(nhdplusv2_comid, cpPR, max)
+  ggplot(aes(x=fct_reorder(nhdplusv2_comid, scpPr, .desc= TRUE), y=scpPr, fill=changepoint_number))+
+  geom_hline(yintercept=0.5, color="pink", linetype="dashed")+
+  geom_bar(stat="identity", position="dodge", color="black")+
+  # geom_text(aes(label=round(scpPr,2)), vjust=-1, size=3) +
+  labs(y="Seasonal changepoint occurance probability",
+       x="COMID")+
+      scale_fill_manual(values=c("grey20","grey40","grey70","grey90"))
+
+counts<-fire_seasonal_changes %>%
+  filter(fire_scp=="fire change") %>% 
+  ungroup()%>%
+  add_count(scpPr>0.5) %>%
+  group_by(`scpPr > 0.5`)%>%
+  summarize(n=length(unique(nhdplusv2_comid)))
+
+```
+
+For `r sum(counts$n)` lakes, the confidence intervals on the trend changepoint encompass the year of the watershed burn.
+
+Is it evident in the raw data?
+
+```{r, fig.width=8,fig.height=8}
+firetrendlakes<-fire_seasonal_changes %>%
+           filter(fire_scp=="fire change")
+
+nested_beast %>%
+  unnest(c(data)) %>%
+  filter(nhdplusv2_comid %in% firetrendlakes$nhdplusv2_comid) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
+  inner_join(., MTBS_moderate %>%
+              select(nhdplusv2_comid, yearBurn), by="nhdplusv2_comid") %>%
+  left_join(., firetrendlakes %>% select(nhdplusv2_comid, scpPr, fire_scp)) %>%
+  mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y"))%>%
+  ggplot()+
+  #Add confidence intervals around changepoint
+  geom_rect(data= nested_beast %>%
+                  unnest(c(scps)) %>%
+                  filter(scp_CI_low %in% firetrendlakes$scp_CI_low),
+  aes(xmin = scp_CI_low, xmax = scp_CI_high, ymin = -Inf, ymax = Inf),
+      color = "pink", fill = "pink")+
+  #Points for raw dWL
+  geom_point(aes(x=decimal_date(date), y=dWL), color="grey50", alpha=0.5, size=0.5)+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = decimal_date(yearBurn)), 
+                color = "red", size=0.5)+
+  #Add vertical line for exact trend changepoint
+  geom_vline(data= nested_beast %>%
+               unnest(c(scps)) %>%
+                filter(scp_CI_low %in% firetrendlakes$scp_CI_low),
+  aes(xintercept = decimal_date(as.Date(as.character(scp_Date), format = "%Y"))), 
+                linetype="dashed", size=0.5)+
+  #Add the cpPR on each panel
+  geom_richtext(data=firetrendlakes,
+                  aes(x = -Inf, y = Inf, hjust=-0.1, vjust=1.5,label= paste0("scpPR=", round(scpPr,1))),
+                stat = "unique", color="black", fill="#f9dcc4", size=2)+
+  facet_wrap(~fct_reorder(nhdplusv2_comid, scpPr, .desc= TRUE), scales="free_y")+
+  theme(strip.text.x = element_textbox(size=10))+
+  labs(y="Observed dominant wavelength (nm)",
+       x="Year")
+```
+
+Not really... Let's look at the decomposed seasonality component from the model. 
+
+```{r, eval=FALSE}
+testrrr<-  fire_seasonal_changes %>%
+  filter(nhdplusv2_comid %in% firetrendlakes$nhdplusv2_comid) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, pred_scps) %>%
+        unnest(c(pred_scps)) %>%
+        filter(nhdplusv2_comid %in% firetrendlakes$nhdplusv2_comid)
+    ) %>%
+  rename(dWL=dWL_season) %>%
+    left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+    mutate_at(vars(scp_Date, scp_CI_low, scp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) 
+names(testrrr)
+
+  fire_seasonal_changes %>%
+  filter(nhdplusv2_comid %in% firetrendlakes$nhdplusv2_comid) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, pred_scps) %>%
+        unnest(c(pred_scps)) %>%
+        filter(nhdplusv2_comid %in% firetrendlakes$nhdplusv2_comid)
+    ) %>%
+  rename(dWL=dWL_season) %>%
+    left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+    mutate_at(vars(scp_Date, scp_CI_low, scp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    ggplot(aes(y = dWL, x = date_dec)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(scp_CI_low),
+        xmax = as.Date(scp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+    geom_vline(aes(xintercept = as.Date(scp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(
+    # data = nested_beast %>%
+      # select(nhdplusv2_comid, pred_scps) %>%
+      # unnest(c(pred_tcps)) %>%
+      # filter(nhdplusv2_comid %in% c("22971746")),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    # data = nested_beast %>%
+      # select(nhdplusv2_comid, pred_tcps) %>%
+      # unnest(c(pred_tcps)) %>%
+      # filter(nhdplusv2_comid %in% c("22971746")),
+    aes(x = as.Date(date_dec), y = dWL)
+  ) +
+    scale_color_identity() +
+    #Raw data
+    geom_point(aes(color=color))+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")
+
+
+nested_beast %>%
+  unnest(c(pred_scps)) %>%
+  filter(nhdplusv2_comid %in% firetrendlakes$nhdplusv2_comid) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
+  inner_join(., MTBS_moderate %>%
+              select(nhdplusv2_comid, yearBurn), by="nhdplusv2_comid") %>%
+  left_join(., firetrendlakes %>% select(nhdplusv2_comid, scpPr, fire_scp)) %>%
+  mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y"))%>%
+  ggplot()+
+  facet_wrap(~fct_reorder(nhdplusv2_comid, scpPr, .desc= TRUE), scales="free_y")+
+  #Add confidence intervals around changepoint
+  geom_rect(data= nested_beast %>%
+                  unnest(c(scps)) %>%
+                  filter(scp_CI_low %in% firetrendlakes$scp_CI_low),
+  aes(xmin = scp_CI_low, xmax = scp_CI_high, ymin = -Inf, ymax = Inf),
+      color = "pink", fill = "pink")+
+  #Ribbon around seasonality
+  geom_ribbon(aes(ymin = (amp-amp_sd), ymax = (amp+amp_sd),
+                                  x = decimal_date(date_dec)), inherit.aes = FALSE, fill="grey50")+
+    #Line for predicted seasonality
+  geom_line(aes(x=decimal_date(date_dec), y=amp))+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = decimal_date(yearBurn)), 
+                color = "red", size=0.5)+
+  #Add vertical line for exact trend changepoint
+  geom_vline(data= nested_beast %>%
+               unnest(c(scps)) %>%
+                filter(scp_CI_low %in% firetrendlakes$scp_CI_low),
+  aes(xintercept = decimal_date(as.Date(as.character(scp_Date), format = "%Y"))), 
+                linetype="dashed", size=0.5)+
+  #Add the cpPR on each panel
+  geom_richtext(data=firetrendlakes,
+                  aes(x = -Inf, y = Inf, hjust=-0.1, vjust=1.5,label= paste0("scpPR=", round(scpPr,1))),
+                stat = "unique", color="black", fill="#f9dcc4", size=2)+
+  theme(strip.text.x = element_textbox(size=10))+
+  labs(y="Amplitude of the seasonality",
+       x="Year")
+# ggsave("figures/scp_gg_1.jpg", width = 8, height = 8, units = 'in')
+```
+![](figures/scp_gg_1.jpg)
+
+### Why do lakes change?
+
+Is there a relationship between % watershed burn and changepoint probability? In other words, does the probability of a trend change in color **increase** as watershed burn area increase? Are smaller lakes more likely to experince a trend change?
+
+```{r, fig.width=8,fig.height=3}
+lakeCat <- readRDS("~/Dropbox/dropbox Research/fire-color/data_export/lakeCat.rds")
+
+
+firetrends_corr <- firetrendlakesstrict %>%
+  ungroup()%>%
+  inner_join(lakeCat) %>%
+  select(cpPR, yearBurn, CatAreaSqKm, WsAreaSqKm, lake_lat_decdeg, lake_lon_decdeg,
+         lake_totalarea_ha, lake_perimeter_m,
+         lake_elevation_m, SlopeCat, WetIndexCat) %>%
+  mutate(CALA=(CatAreaSqKm*100)/lake_totalarea_ha,
+         WALA=(WsAreaSqKm*100)/lake_totalarea_ha) 
+
+firetrendlakesstrict %>%
+  inner_join(., MTBS_moderate %>% select(-yearBurn), by="nhdplusv2_comid") %>%
+  rename(perc_burn=value) %>%
+  ggplot(aes(x=perc_burn,y=cpPR))+
+  geom_point(size=3)+
+  labs(x="% watershed burn") +
+
+firetrendlakesstrict %>%
+  inner_join(., MTBS_moderate %>% select(-yearBurn), by="nhdplusv2_comid") %>%
+  rename(perc_burn=value) %>%
+  ggplot(aes(x=lake_totalarea_ha,y=cpPR))+
+  geom_point(size=3)+
+  labs(x="Lake surface area (log10 ha)")+
+  scale_x_log10()
+```
+
+Is cpPR correlated with anything??
+
+```{r}
+library("PerformanceAnalytics")
+firetrends_corr_NAfree<-firetrends_corr %>% drop_na()
+chart.Correlation(firetrends_corr, histogram=TRUE, pch=19)
+```
+
+
+# Lakes without fires
+
+One of the things Sarah and I discussed was simulating random "fake fires" through a subset of unburned lakes and seeing how many of those lakes detected a change. That might further bolster this proof of concept. Say 10% of the lakes have a changepoint within 5 years of a hypothetical fire, that's a fairly low false positive rate. In any case, let's give it a whirl.
+
+## Create df of lakes that didn't burn
+```{r}
+
+set.seed(5555)
+#Randomly generate yearBurn for each lake 
+IDs <- colorNoBurn %>%
+  distinct(nhdplusv2_comid) %>%
+  pull()
+DATEs <- sample(seq(as.Date('1991/07/01'), as.Date('2005/07/01'), by="day"), length(IDs))
+randomBurns <- data.frame(IDs,DATEs) %>%
+  rename(nhdplusv2_comid=IDs,
+         yearBurn=DATEs)
+
+colorNoBurn_trim <- colorNoBurn %>% 
+  inner_join(randomBurns)%>%
+  mutate(
+    month = month(date),
+    year = year(date),
+    doy = yday(date)
+  ) %>%
+  mutate(dWL = replace(dWL, dWL < 470, NA),
+         dWL = replace(dWL, dWL > 583, NA)) %>%
+  drop_na(dWL) %>%
+  group_by(nhdplusv2_comid, year) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(fire_period = case_when(date <= yearBurn ~ "pre_fire",
+                                 date > yearBurn ~ "post_fire")) %>%
+  group_by(nhdplusv2_comid, fire_period) %>%
+  mutate(unique_years = n_distinct(year)) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(pre_and_post = length(unique(fire_period))) %>%
+  filter(pre_and_post == 2) %>% #require both pre- and post-fire data
+  pivot_wider(
+    names_from = "fire_period",
+    values_from = "unique_years",
+    names_prefix = "years_",
+    values_fn = mean
+  ) %>% #Need to add values_fn to suppress duplicates warning
+  unnest(c(years_post_fire, years_pre_fire)) %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(min(years_pre_fire, na.rm = TRUE) >= 5 &
+           min(years_post_fire, na.rm = TRUE) >= 5) %>%
+  select(
+    nhdplusv2_comid,
+    yearBurn,
+    date,
+    year,
+    month,
+    doy,
+    dWL,
+    pre_and_post,
+    years_post_fire,
+    years_pre_fire
+  ) %>%
+  ungroup()
+
+
+
+##CODE BELOW IS FOR THE SUBSET OF 500 LAKES
+
+# 
+# #Randomly generate yearBurn for each lake 
+# IDs <- colorNoBurn_subset %>%
+#   distinct(nhdplusv2_comid) %>%
+#   pull()
+# DATEs <- sample(seq(as.Date('1991/07/01'), as.Date('2005/07/01'), by="day"), 500)
+# randomBurns <- data.frame(IDs,DATEs) %>%
+#   rename(nhdplusv2_comid=IDs,
+#          yearBurn=DATEs)
+# 
+# colorNoBurn_trim <- colorNoBurn_subset %>% 
+#   inner_join(randomBurns)%>%
+#   mutate(
+#     month = month(date),
+#     year = year(date),
+#     doy = yday(date)
+#   ) %>%
+#   mutate(dWL = replace(dWL, dWL < 470, NA),
+#          dWL = replace(dWL, dWL > 583, NA)) %>%
+#   drop_na(dWL) %>%
+#   group_by(nhdplusv2_comid, year) %>%
+#   group_by(nhdplusv2_comid) %>%
+#   mutate(fire_period = case_when(date <= yearBurn ~ "pre_fire",
+#                                  date > yearBurn ~ "post_fire")) %>%
+#   group_by(nhdplusv2_comid, fire_period) %>%
+#   mutate(unique_years = n_distinct(year)) %>%
+#   group_by(nhdplusv2_comid) %>%
+#   mutate(pre_and_post = length(unique(fire_period))) %>%
+#   filter(pre_and_post == 2) %>% #require both pre- and post-fire data
+#   pivot_wider(
+#     names_from = "fire_period",
+#     values_from = "unique_years",
+#     names_prefix = "years_",
+#     values_fn = mean
+#   ) %>% #Need to add values_fn to suppress duplicates warning
+#   unnest(c(years_post_fire, years_pre_fire)) %>%
+#   group_by(nhdplusv2_comid) %>%
+#   filter(min(years_pre_fire, na.rm = TRUE) >= 5 &
+#            min(years_post_fire, na.rm = TRUE) >= 5) %>%
+#   select(
+#     nhdplusv2_comid,
+#     yearBurn,
+#     date,
+#     year,
+#     month,
+#     doy,
+#     dWL,
+#     pre_and_post,
+#     years_post_fire,
+#     years_pre_fire
+#   ) %>%
+#   ungroup()
+
+
+```
+
+## Run BEAST
+```{r}
+
+start_time <- Sys.time()
+set.seed(1111)
+nested_beast <- colorNoBurn_trim %>%
+  as_tibble() %>%
+  ungroup() %>%
+  arrange(date) %>%
+  group_by(year, month, nhdplusv2_comid) %>%
+  distinct(date, .keep_all = TRUE) %>%
+  summarize(median = median(dWL, na.rm = TRUE)) %>%
+  na.trim() %>%
+  ungroup() %>%
+  group_by(nhdplusv2_comid) %>%
+  transmute(date = ymd(paste(year, month, "01", sep = "-")),
+            dWL = median) %>%
+  mutate(yearmonth = yearmonth(date)) %>% #need to index by yearmonth
+  as_tsibble(., key = nhdplusv2_comid, index = yearmonth) %>% #time series tibble
+  fill_gaps() %>% #makes the missing data implicit
+  select(-date) %>%
+  mutate(date = as.Date(yearmonth)) %>%
+  as_tibble() %>%
+  select(-yearmonth) %>%
+  group_by(nhdplusv2_comid) %>%
+  nest() %>%
+  # filter(nhdplusv2_comid=="20328576")%>%
+  mutate(
+    beast = purrr::map(data, map_beast),
+    tcps = purrr::map(beast, map_tcps),
+    scps = purrr::map(beast, map_scps),
+    pred_tcps = purrr::map(beast, map_pred_tcps),
+    pred_scps = purrr::map(beast, map_pred_scps)
+  ) %>%
+  select(-beast)
+end_time <- Sys.time()
+
+round(end_time - start_time,1)
+
+#Takes about 6 minutes for the 500 lake subset, and 25 minutes for all unburned sites
+```
+
+
+### Investigate
+```{r}
+fakefire_trends <- nested_beast %>%
+  select(nhdplusv2_comid, tcps) %>%
+  unnest(tcps) %>%
+  left_join(., colorNoBurn_trim %>%
+              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") %>%
+  mutate(yearBurn = decimal_date(yearBurn)) %>%
+  distinct(nhdplusv2_comid, .keep_all=TRUE) %>%
+  group_by(nhdplusv2_comid, tcp_Date) %>%
+    mutate(
+    fire_cp = case_when(
+      # tcp_CI_low <= yearBurn & tcp_CI_high >= yearBurn & #Make sure tcp CI surround yearBurn
+      tcp_CI_high - yearBurn <= 5 &
+        #Make sure the upper bound of the tcp is within 5 years of the burn
+        tcp_Date >= yearBurn - 1 &
+        #tcp_Date can be up to 1 year before yearBurn
+        abs(yearBurn - tcp_Date) <= 5 ~ 'fire change',
+      #BUT no more than 5 years PAST yearBurn
+      TRUE ~ "change not associated with fire"
+    )
+  )
+
+##Note: when I switched it from 5 years to 3 years the percentage went from 11 to 9%. So not too different. 
+
+counts <- fakefire_trends %>%
+  filter(fire_cp == "fire change") %>%
+  ungroup() %>%
+  add_count(cpPR > 0.5) %>%
+  group_by(`cpPR > 0.5`) %>%
+  summarize(n = length(unique(nhdplusv2_comid)))
+
+```
+
+```{r}
+fakefire_trends %>%
+  filter(fire_cp=="fire change") %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(changepoint_number = row_number()) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)),
+         changepoint_number=as.factor(as.numeric(changepoint_number)))%>%
+  ggplot(aes(x=fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), y=cpPR, fill=changepoint_number))+
+  geom_hline(yintercept=0.5, color="pink", linetype="dashed")+
+  geom_bar(stat="identity", position="dodge",  color="black", width=0.75)+
+  # geom_text(aes(label=round(cpPR,2)), vjust=-1  , hjust=-0.2, size=3, angle=45) +
+  labs(y="Trend changepoint occurance probability",
+       x="COMID",
+       title="Lakes with fake burns (n=500)")+
+    scale_fill_manual(values=c("grey20","grey40","grey70","grey90"))+
+  theme(legend.position="bottom")
+
+```
+
+For `r sum(counts$n)` lakes, we detect at least one changepoint within 5 years of the fire. For `r counts%>%pluck(2,2)` of those lakes, the probability is quite high (>0.5). So approximately `r round(sum(counts$n)/length(unique(nested_beast$nhdplusv2_comid)),2)*100`% of the lakes show a color change in response to fire. 
+
+The overall percentage is fairly low but it is kind of disturbing how high some of those probabilities are. WHYYYY. Let's look at a few lakes. 
+
+### Visualize
+```{r}
+  
+fakefire_subset<-fakefire_trends %>%
+  filter(fire_cp=="fire change") %>%
+  arrange(desc(cpPR)) 
+fakefire_subset<-fakefire_subset[1:5,]
+
+
+
+nested_beast %>%
+  select(nhdplusv2_comid, data)%>%
+  unnest(c(data)) %>%
+  filter(nhdplusv2_comid %in% fakefire_subset$nhdplusv2_comid) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)))%>%
+  inner_join(., colorNoBurn_trim %>%
+              select(nhdplusv2_comid, yearBurn), by="nhdplusv2_comid") %>%
+  left_join(., fakefire_subset %>% select(nhdplusv2_comid, cpPR, fire_cp)) %>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y")) %>%
+  group_by(nhdplusv2_comid) %>%
+  distinct(date, .keep_all=TRUE) %>%#For some reason a million duplicates were showing up
+  inner_join(., nested_beast %>%
+    select(nhdplusv2_comid, pred_tcps) %>%
+    unnest(c(pred_tcps)) %>%
+    filter(nhdplusv2_comid %in% fakefire_subset$nhdplusv2_comid) %>%
+      rename(date=date_dec), by=c("nhdplusv2_comid","date")) %>%
+  ggplot()+
+  #Add confidence intervals around changepoint
+  geom_rect(data= nested_beast %>%
+                  unnest(c(tcps)) %>%
+                  filter(tcp_CI_low %in% fakefire_subset$tcp_CI_low),
+  aes(xmin = tcp_CI_low, xmax = tcp_CI_high, ymin = -Inf, ymax = Inf),
+      color = "pink", fill = "pink")+
+  #Add CI around fitted trend
+  geom_ribbon(aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = decimal_date(date)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(aes(x = decimal_date(date), y = dWL_pred)
+  )+
+  #Points for raw dWL
+  geom_point(aes(x=decimal_date(date), y=dWL,color=color), alpha=0.8, size=1)+
+  scale_color_identity() +
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = decimal_date(yearBurn)), 
+                color = "red", size=0.5)+
+  #Add vertical line for exact trend changepoint
+  geom_vline(data= nested_beast %>%
+               unnest(c(tcps)) %>%
+                filter(tcp_CI_low %in% fakefire_subset$tcp_CI_low),
+  aes(xintercept = decimal_date(as.Date(as.character(tcp_Date), format = "%Y"))), 
+                linetype="dashed", size=0.5)+
+  #Add the cpPR on each panel
+  geom_richtext(data=fakefire_subset,
+                  aes(x = -Inf, y = Inf, hjust=-0.1, vjust=1.5,label= paste0("cpPR=", round(cpPR,1))),
+                stat = "unique", color="black", fill="#f9dcc4", size=2)+
+  facet_wrap(~fct_reorder(nhdplusv2_comid, cpPR, .desc= TRUE), scales="free_y")+
+  theme(strip.text.x = element_textbox(size=10,fill = "grey40", box.color = "#000000"))+
+  labs(y="Observed dominant wavelength (nm)",
+       x="Year",
+       title="Lakes with fake/randomly selected fires dates")+
+  cowplot::panel_border() +
+  cowplot::background_grid()
+
+
+```
