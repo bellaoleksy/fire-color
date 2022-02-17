@@ -570,7 +570,7 @@ str(HydroLakes_DP_comids_trim)
 length(unique(HydroLakes_DP_comids_trim$nhdplusv2_comid))
 
 #Read in HydroLakes color stuff
-srCor<-read_feather('~/Dropbox/dropbox Research/Western-Color-Fire/srCorrected_us_hydrolakes_dp_20200628.feather') %>%
+srCor<-read_feather('~/Dropbox/dropbox Research/fire-color/data/hydroLakes/srCorrected_us_hydrolakes_dp_20200628.feather') %>%
   mutate(Hylak_id=as.character(as.numeric(Hylak_id))) 
 str(srCor)
 
