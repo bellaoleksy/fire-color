@@ -1975,7 +1975,7 @@ Ahh, seeing the full timeseries with all the changepoints and their confidence i
 I don't think we want to use a truncated timeserise. Although there is overlap in some lakes, it seems like the answers are different enough and the truncated timeseries analysis a little **too** sensitive to picking up changes post-fire. 
 
 
-# BEAST model (>5% burn)
+# BEAST model (>1% burn)
 
 Here I am going to run the model and include any lake that burned >= 5% of the local catchment.
 ```{r, echo=TRUE,  results=FALSE, message=FALSE, warning=FALSE, class.source = 'fold-show'}
@@ -2971,7 +2971,7 @@ noBurnCount<-data.frame(burnSeverityClass,
                         firechange,
                         prop_change) %>%
   mutate(firechange=factor(firechange,
-                           levels=c("no","yes")))%>%
+                           levels=c("no","yes")))
 
 
 # Stacked barplot with proportions
@@ -3005,6 +3005,88 @@ BurnClassCount %>%
 levels(testing123$firechange)
 ```
 
+
+## Strength of cpPR by burn severity
+
+```{r}
+
+
+fire_trend_changes_over5 %>%
+  full_join(., MTBS_moderate %>% mutate(yearBurn = as.numeric(as.character(yearBurn)))) %>%
+  filter(nhdplusv2_comid %in% colorModtoSevereBurn_trim$nhdplusv2_comid) %>%
+  group_by(nhdplusv2_comid)  %>%
+  # slice(which.max(value)) %>% # We have duplicate rows of observations and this picks just the year of the burn
+  mutate(burnSeverityClass = cut(
+    value,
+    breaks = c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+    labels = c(
+      "1-10%",
+      "10-20%",
+      "20-30%",
+      "30-40%",
+      "40-50%",
+      "50-60%",
+      "60-70%",
+      "70-80%",
+      "80-90%",
+      "90-100%"
+    ),
+    ordered_result = TRUE
+  )) %>%
+    filter(fire_cp=="fire change")%>%
+  ggplot(aes(x = burnSeverityClass, y = cpPR, fill = burnSeverityClass)) +
+  geom_violin() +
+  geom_jitter(
+    shape = 21,
+    color = "black",
+    size = 1.5,
+    width = 0.1
+  ) +
+  scale_fill_discrete_sequential(palette = "Reds") +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 11)) +
+  labs(y = "Trend changepoint occurance probability",
+       x = "Burn severity class (% of local catchment)") +
+
+
+
+fire_trend_changes_over5 %>%
+  full_join(
+    ., MTBS_moderate %>% mutate(yearBurn=as.numeric(as.character(yearBurn)))
+  ) %>% 
+    filter(nhdplusv2_comid %in% colorModtoSevereBurn_trim$nhdplusv2_comid) %>%
+  group_by(nhdplusv2_comid)  %>%
+  mutate(burnSeverityClass = cut(value, breaks = c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+                                 labels = c("1-10%","10-20%","20-30%","30-40%","40-50%","50-60%",
+                                            "60-70%","70-80%","80-90%","90-100%"),
+                                 ordered_result = TRUE)) %>%
+  ungroup() %>%
+  filter(fire_cp=="fire change")%>%
+    mutate(cpPR_Class = cut(
+    cpPR,
+    breaks = c(0.1,0.25,0.50,0.75,1),
+    ordered_result = FALSE
+  )) %>%
+  mutate(cpPR_Class=factor(cpPR_Class,
+                           levels=c("(0.75,1]","(0.5,0.75]",
+                                    "(0.25,0.5]","(0.1,0.25]")))%>%
+  group_by(burnSeverityClass) %>%
+  add_count(name="n_per_burnClass") %>%
+  group_by(burnSeverityClass, cpPR_Class) %>%
+  add_count(name="n_class_type") %>%
+    group_by(burnSeverityClass, cpPR_Class, n_class_type) %>%
+  summarize(prop_cat=n_class_type/n_per_burnClass) %>%
+  distinct(burnSeverityClass, cpPR_Class, .keep_all = TRUE) %>%
+  ggplot(aes(fill = cpPR_Class, y = prop_cat, x = burnSeverityClass)) +
+  geom_bar(color="black", position = "fill", stat = "identity") +
+  scale_fill_manual(values = c("#4f0000","#781f1f","#ba3f3f","#ffa14a"),
+                    name = "Changepoint occurance probability:")+
+geom_text(aes(label= paste0("n=", n_class_type)), color="white", vjust=1.3, position = "fill", stat = "identity", size=3)+
+  labs(x="Burn severity class (% of local catchment)",
+       y="Proportion of lakes") + theme(legend.position="top")+
+  guides(fill = guide_legend(reverse = TRUE)) #Change order of factors on legend without altering the plot
+
+```
 
 ### Why do lakes change?
 
