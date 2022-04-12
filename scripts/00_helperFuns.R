@@ -42,7 +42,7 @@ plot_theme <- function(...) {
   
 }
 
-
+#Make default theme for all .R and .Rmd files
 theme_set(plot_theme())
 
 # Base ggplot2 theme for maps ------------------------------------------------------
