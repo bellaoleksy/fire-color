@@ -461,6 +461,7 @@ BurnClassCount<-MTBS_long %>%
   summarize(n_lakes=length(unique(nhdplusv2_comid))) 
 
 BurnClassCount %>%
+  filter(scale=="Cat")%>%
   ggplot(aes(x=as.numeric(as.character(year)),y=n_lakes, fill=burnSeverityClass, color=burnSeverityClass, group=burnSeverityClass))+
   geom_line()+
   geom_point(shape=21, size=2.5, color="black")+
@@ -476,9 +477,14 @@ BurnClassCount %>%
   labs(x="Year",
        y="n lakes",
        title="Number of lakes in each burn severity class")+
-  ggpubr::theme_pubr(base_size=8)+
-  theme(axis.text.x=element_text(angle = 45, hjust = 1, size=8),
-        strip.text = element_text(face="bold"))
+  # ggpubr::theme_pubr(base_size=8)+
+  theme(axis.text.x=element_text(angle = 45, hjust = 1, size=12),
+        axis.text.y=element_text(size=12),
+        plot.title=element_text(size=18),
+        axis.title=element_text(size=12),
+        legend.text = element_text(size=12))
+        # strip.text = element_text(face="bold", size=12))
+ggsave("figures/n_lakes_burned_by_class.jpg", width = 8, height = 8, units = 'in')
 ```
 
 ```{r, tidy=TRUE, error=FALSE, message=FALSE}
@@ -487,7 +493,8 @@ BurnClassLMs<-BurnClassCount%>%
   # filter(scale=="Ws") %>% 
   group_by(scale,burnSeverityClass) %>%
   do(tidy(lm(year ~ n_lakes, .))) %>%
-  arrange(burnSeverityClass, scale) 
+  arrange(burnSeverityClass, scale) %>%
+  filter(term=="n_lakes")
 
 knitr::kable(BurnClassLMs, "simple", caption="Table summarizing the linear model results")
 ```
@@ -2619,4 +2626,16 @@ aw_lakes_export <- aw_lakes_alt %>%
 write_csv(aw_lakes_export, "data_export/Annika_Walters_lake_color.csv")
 
 #Preview data
+```
+
+### Data for Xiao
+```{r, eval=F}
+names(MTBS_long)
+
+MTBS_export <- MTBS_long %>%
+  select(nhdplusv2_comid, lake_totalarea_ha, lake_lat_decdeg, lake_lon_decdeg) %>%
+  distinct(nhdplusv2_comid, .keep_all = TRUE) %>%
+  filter(lake_totalarea_ha >= 1)
+write_csv(MTBS_export, "data_export/westernUS_lakes.csv")
+
 ```
