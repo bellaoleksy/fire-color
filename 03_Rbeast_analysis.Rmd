@@ -827,11 +827,13 @@ nested_beast <- colorModtoSevereBurn_trim %>%
   ) 
 gc()#Free up memory
 end_time <- Sys.time()
-# save(nested_beast, file="data_export/nested_beast_20220226.RData")
+save(nested_beast, file="data_export/nested_beast_20220412.RData")
 ```
+
 ```{r}
 # load('fire-color/data_export/nested_beast_20220226.RData')
-load('data_export/nested_beast_20220226.RData')
+# load('data_export/nested_beast_20220226.RData')
+load('data_export/nested_beast_20220412.RData')
 ```
 The model takes a bit longer to run this time of course, at about `r round(end_time - start_time,1)` minutes.
 
@@ -1060,7 +1062,7 @@ nested_beast %>%
   cowplot::panel_border() +
   cowplot::background_grid()
 
-ggsave("figures/mcp_lakes_with_changepoints.jpg", width = 16, height = 12, units = 'in')
+# ggsave("figures/mcp_lakes_with_changepoints.jpg", width = 16, height = 12, units = 'in')
 
 
 
@@ -1169,7 +1171,7 @@ nested_beast %>%
   cowplot::panel_border() +
   cowplot::background_grid()
 
-ggsave("figures/all_lakes_with_mcp.jpg", width = 18, height = 16, units = 'in')
+# ggsave("figures/04_all_lakes_with_mcp.jpg", width = 18, height = 16, units = 'in')
 ```
 
 ### Case studies / closer look
@@ -2405,7 +2407,7 @@ fire_trend_changes_over5 %>%
        x="COMID",
        title="In lakes with multiple changepoints, how did color respond?")+
   theme(axis.text.x=element_text(size=6))
-ggsave("figures/mcp_responses.jpg", width = 8, height = 6, units = 'in', dpi=600)
+# ggsave("figures/mcp_responses.jpg", width = 8, height = 6, units = 'in', dpi=600)
 ```
 
 
@@ -2604,6 +2606,299 @@ ggsave("figures/mcp_responses.jpg", width = 8, height = 6, units = 'in', dpi=600
     facet_wrap(~nhdplusv2_comid, scale="free_x")
 
 ```
+
+### 10 years before/after burn
+
+```{r}
+color_normalized<-nested_beast %>%
+        select(nhdplusv2_comid, pred_tcps) %>%
+        unnest(c(pred_tcps)) %>%
+        filter(nhdplusv2_comid %in% fire_trend_changes_over5$nhdplusv2_comid) %>%
+  left_join(., fire_trend_changes_over5 %>%
+              ungroup() %>%
+              select(nhdplusv2_comid, yearBurn, fire_cp, sign, tcp_Date) %>%
+              filter(fire_cp == "fire change") %>%
+              group_by(nhdplusv2_comid) %>%
+              arrange(tcp_Date) %>%
+              filter(row_number()==1)) %>%
+  mutate(year=year(date_dec)) %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(year >= yearBurn-10  & year <= yearBurn+10) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(year_norm = case_when(year == yearBurn ~ 0,
+                               year == yearBurn - 1 ~ -1,
+                               year == yearBurn - 2 ~ -2,
+                               year == yearBurn - 3 ~ -3,
+                               year == yearBurn - 4 ~ -4,
+                               year == yearBurn - 5 ~ -5,
+                               year == yearBurn - 6 ~ -6,
+                               year == yearBurn - 7 ~ -7,
+                               year == yearBurn - 8 ~ -8,
+                               year == yearBurn - 9 ~ -9,
+                               year == yearBurn - 10 ~ -10,
+                               year == yearBurn + 1 ~ 1,
+                               year == yearBurn + 2 ~ 2,
+                               year == yearBurn + 3 ~ 3,
+                               year == yearBurn + 4 ~ 4,
+                               year == yearBurn + 5 ~ 5,
+                               year == yearBurn + 6 ~ 6,
+                               year == yearBurn + 7 ~ 7,
+                               year == yearBurn + 8 ~ 8,
+                               year == yearBurn + 9 ~ 9,
+                               year == yearBurn + 10 ~ 10)) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(dwl_pred_norm = scale(dWL_pred))
+```
+
+#### Visualized burned lakes (neg & pos responses)
+```{r}
+
+##ALL DATA
+#Extract the median normalized color at year zero
+yearZero <-
+  color_normalized %>%
+  ungroup() %>%
+  filter(year_norm == 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm)) 
+  # pull()
+color_normalized  %>%
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero) +
+  geom_boxplot(size=0.5, width=0.5) +
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#1f78b4','#33a02c'))+
+    scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y="All dwl datapoints (normalized by lake)",
+       x="Years since fire",
+       title="All datapoints") +
+  theme(axis.text.x = element_text(
+        angle = 0,
+        hjust = 1,
+        size = 8
+      ),
+      legend.position="none",
+      plot.background = element_rect(fill="white"))
+ggsave("figures/dwl_change_by_sign_allData.png", width = 8, height = 8, units = 'in')
+
+##ANNUAL MEDIAN
+#Extract the median normalized color at year zero
+yearZero <-
+  color_normalized %>%
+  group_by(nhdplusv2_comid, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  filter(year_norm == 0) %>%
+    group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm)) 
+  # pull()
+color_normalized  %>%
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  group_by(nhdplusv2_comid, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero) +
+  geom_boxplot(size=0.5, width=0.5) +
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#1f78b4','#33a02c'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y="Annual median dwl (normalized by lake)",
+       x="Years since fire",
+       title="Annual median")+
+  theme(axis.text.x = element_text(
+        angle = 0,
+        hjust = 1,
+        size = 8
+      ),
+      legend.position="none",
+      plot.background = element_rect(fill="white"))
+ggsave("figures/dwl_change_by_sign_annualMedians.png", width = 8, height = 8, units = 'in')
+
+
+##SEASONAL MEDIAN
+yearZero <-
+  color_normalized %>%
+    mutate(month=month(date_dec)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      )) %>%
+  group_by(nhdplusv2_comid, season, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  filter(year_norm == 0) %>%
+    group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm)) 
+
+color_normalized  %>%
+  mutate(month=month(date_dec)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      ),
+    season = factor(season, 
+                    levels=c("OND","JFM","AMJ","JAS"),
+                    labels=c("October-December",
+                             "January-March",
+                             "April-June",
+                             "July-September"))) %>%
+#!!!!!!!THINK ABOUT ADJUSTING FOR WATER YEAR LATER
+  #   water_year = ifelse(
+  #     season %in% c("OND", "JFM") &
+  #       month %in% c("10", "11", "12", "1", "2", "3", "4"),
+  #     year - 1,
+  #     year
+  #   )
+  # )               
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  group_by(nhdplusv2_comid, season,year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero) +
+  geom_boxplot(size=0.5, width=0.5) +
+  facet_wrap(sign~season,
+             ncol=4) + 
+  scale_fill_manual(values=c('#1f78b4','#33a02c'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y="Annual median dwl (normalized by lake)",
+       x="Years since fire",
+       title="Seasonal medians")+
+  theme(axis.text.x = element_text(
+        angle = 0,
+        hjust = 1,
+        size = 8
+      ),
+      legend.position="none",
+      plot.background = element_rect(fill="white"))
+ggsave("figures/dwl_change_by_sign_seasonalMedians.png", width = 11, height = 8.5, units = 'in')
+
+
+
+```
+
+#### Visualize unburned sites
+```{r}
+color_normalized_noBurn<-nested_beast_noBurn %>%
+        select(nhdplusv2_comid, pred_tcps) %>%
+        unnest(c(pred_tcps)) %>%
+  left_join(., fakefire_trends %>%
+              ungroup() %>%
+              select(nhdplusv2_comid, yearBurn, fire_cp, sign, tcp_Date) %>%
+              filter(fire_cp == "fire change") %>%
+              group_by(nhdplusv2_comid) %>%
+              arrange(tcp_Date) %>%
+              filter(row_number()==1)) %>%
+  mutate(year=year(date_dec),
+         yearBurn=round(yearBurn,0)) %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(year >= yearBurn-10  & year <= yearBurn+10) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(year_norm = case_when(year == yearBurn ~ 0,
+                               year == yearBurn - 1 ~ -1,
+                               year == yearBurn - 2 ~ -2,
+                               year == yearBurn - 3 ~ -3,
+                               year == yearBurn - 4 ~ -4,
+                               year == yearBurn - 5 ~ -5,
+                               year == yearBurn - 6 ~ -6,
+                               year == yearBurn - 7 ~ -7,
+                               year == yearBurn - 8 ~ -8,
+                               year == yearBurn - 9 ~ -9,
+                               year == yearBurn - 10 ~ -10,
+                               year == yearBurn + 1 ~ 1,
+                               year == yearBurn + 2 ~ 2,
+                               year == yearBurn + 3 ~ 3,
+                               year == yearBurn + 4 ~ 4,
+                               year == yearBurn + 5 ~ 5,
+                               year == yearBurn + 6 ~ 6,
+                               year == yearBurn + 7 ~ 7,
+                               year == yearBurn + 8 ~ 8,
+                               year == yearBurn + 9 ~ 9,
+                               year == yearBurn + 10 ~ 10)) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(dwl_pred_norm = scale(dWL_pred))
+
+#Extract the median normalized color at year zero
+yearZero <-
+  color_normalized_noBurn %>%
+  ungroup() %>%
+  filter(year_norm == 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm)) 
+  # pull()
+color_normalized_noBurn  %>%
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero) +
+  geom_boxplot(size=0.5, width=0.5) +
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#1f78b4','#33a02c'))+
+    scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y="All dwl datapoints (normalized by lake)",
+       x="Years since fire",
+       title="Lakes that didn't burn",
+       subtitle="where we simulated a 'fake' fire") +
+  theme(axis.text.x = element_text(
+        angle = 0,
+        hjust = 1,
+        size = 8
+      ))
+
+#Extract the median normalized color at year zero
+yearZero <-
+  color_normalized_noBurn %>%
+  group_by(nhdplusv2_comid, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  filter(year_norm == 0) %>%
+    group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm)) 
+  # pull()
+color_normalized_noBurn  %>%
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  group_by(nhdplusv2_comid, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero) +
+  geom_boxplot(size=0.5, width=0.5) +
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#1f78b4','#33a02c'))+
+      scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y="Annual median dwl (normalized by lake)",
+       x="Years since fire")+
+  theme(axis.text.x = element_text(
+        angle = 0,
+        hjust = 1,
+        size = 8
+      ))
+
+
+```
+
 
 ### explore pos_ and neg_ model output
 ```{r}
@@ -2844,13 +3139,13 @@ colorNoBurn_trim <- colorNoBurn %>%
     years_pre_fire
   ) %>%
   ungroup()
-
+bvnnnngggggggg
 
 
 ##CODE BELOW IS FOR THE SUBSET OF 500 LAKES
 
 # 
-# #Randomly generate yearBurn for each lake 
+#Randomly generate yearBurn for each lake
 # IDs <- colorNoBurn_subset %>%
 #   distinct(nhdplusv2_comid) %>%
 #   pull()
@@ -2859,7 +3154,7 @@ colorNoBurn_trim <- colorNoBurn %>%
 #   rename(nhdplusv2_comid=IDs,
 #          yearBurn=DATEs)
 # 
-# colorNoBurn_trim <- colorNoBurn_subset %>% 
+# colorNoBurn_trim <- colorNoBurn_subset %>%
 #   inner_join(randomBurns)%>%
 #   mutate(
 #     month = month(date),
@@ -2910,7 +3205,7 @@ colorNoBurn_trim <- colorNoBurn %>%
 
 start_time <- Sys.time()
 set.seed(1111)
-nested_beast <- colorNoBurn_trim %>%
+nested_beast_noBurn <- colorNoBurn_trim %>%
   as_tibble() %>%
   ungroup() %>%
   arrange(date) %>%
@@ -2944,13 +3239,17 @@ end_time <- Sys.time()
 
 round(end_time - start_time,1)
 
+# save(nested_beast_noBurn, file="data_export/nested_beast_noBurn_20220413.RData")
 #Takes about 6 minutes for the 500 lake subset, and 25 minutes for all unburned sites
 ```
 
 
 ### Investigate
-```{r, eval=F}
-fakefire_trends <- nested_beast %>%
+```{r}
+
+load('data_export/nested_beast_noBurn_20220413.RData')
+
+fakefire_trends <- nested_beast_noBurn %>%
   select(nhdplusv2_comid, tcps) %>%
   unnest(tcps) %>%
   left_join(., colorNoBurn_trim %>%
@@ -3001,7 +3300,7 @@ fakefire_trends %>%
 
 ```
 
-For `r sum(counts$n)` lakes, we detect at least one changepoint within 5 years of the fire. For `r counts%>%pluck(2,2)` of those lakes, the probability is quite high (>0.5). So approximately `r round(sum(counts$n)/length(unique(nested_beast$nhdplusv2_comid)),2)*100`% of the lakes show a color change in response to fire. 
+For `r sum(counts$n)` lakes, we detect at least one changepoint within 5 years of the fire. For `r counts%>%pluck(2,2)` of those lakes, the probability is quite high (>0.5). So approximately `r round(sum(counts$n)/length(unique(nested_beast_noBurn$nhdplusv2_comid)),2)*100`% of the lakes show a color change in response to fire. 
 
 The overall percentage is fairly low but it is kind of disturbing how high some of those probabilities are. WHYYYY. Let's look at a few lakes. 
 
@@ -3015,7 +3314,7 @@ fakefire_subset<-fakefire_subset[1:5,]
 
 
 
-nested_beast %>%
+nested_beast_noBurn %>%
   select(nhdplusv2_comid, data)%>%
   unnest(c(data)) %>%
   filter(nhdplusv2_comid %in% fakefire_subset$nhdplusv2_comid) %>%
@@ -3028,14 +3327,14 @@ nested_beast %>%
   mutate(yearBurn=as.Date(as.character(yearBurn), format = "%Y")) %>%
   group_by(nhdplusv2_comid) %>%
   distinct(date, .keep_all=TRUE) %>%#For some reason a million duplicates were showing up
-  inner_join(., nested_beast %>%
+  inner_join(., nested_beast_noBurn %>%
     select(nhdplusv2_comid, pred_tcps) %>%
     unnest(c(pred_tcps)) %>%
     filter(nhdplusv2_comid %in% fakefire_subset$nhdplusv2_comid) %>%
       rename(date=date_dec), by=c("nhdplusv2_comid","date")) %>%
   ggplot()+
   #Add confidence intervals around changepoint
-  geom_rect(data= nested_beast %>%
+  geom_rect(data= nested_beast_noBurn %>%
                   unnest(c(tcps)) %>%
                   filter(tcp_CI_low %in% fakefire_subset$tcp_CI_low),
   aes(xmin = tcp_CI_low, xmax = tcp_CI_high, ymin = -Inf, ymax = Inf),
@@ -3058,7 +3357,7 @@ nested_beast %>%
   geom_vline(aes(xintercept = decimal_date(yearBurn)), 
                 color = "red", size=0.5)+
   #Add vertical line for exact trend changepoint
-  geom_vline(data= nested_beast %>%
+  geom_vline(data= nested_beast_noBurn %>%
                unnest(c(tcps)) %>%
                 filter(tcp_CI_low %in% fakefire_subset$tcp_CI_low),
   aes(xintercept = decimal_date(as.Date(as.character(tcp_Date), format = "%Y"))), 
