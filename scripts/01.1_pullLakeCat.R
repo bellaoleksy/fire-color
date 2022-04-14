@@ -36,6 +36,15 @@ FirePerimeters<-read.csv("~/Dropbox/dropbox Research/fire-color/data/lakeCat/Fir
 # FirePerimeters<-semi_join(FirePerimeters,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
 FirePerimeters<-inner_join(FirePerimeters,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
 
+FirePerimeters_long <- FirePerimeters %>%
+  dplyr::select(lagoslakeid, nhdplusv2_comid,lake_nhdid,nhdplusv2_reachcode,lake_namegnis,
+                lake_lon_decdeg, lake_lat_decdeg,
+                contains("PctFire"))%>%
+  pivot_longer(-(1:7), names_pattern = "(\\d+)([A-Za-z]+)", names_to = c("year","scale"))
+# "([A-Za-z]+)" matches only letters, so will pull out just "Ws" or "Cat". "(\\d+)" matches digits and will pull out the year.
+
+
+
 #Forest loss
 ForestLoss<-read.csv("~/Dropbox/dropbox Research/fire-color/data/lakeCat/ForestLossByYear0013.csv") %>%
   rename(nhdplusv2_comid=COMID)%>%
@@ -62,37 +71,45 @@ reservoir<-inner_join(reservoir,lakeIDs,by="lagoslakeid")# All rows in a that ha
 # AgN<-semi_join(AgN,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
 # 
 # #NLCD
-# NLCD2001 <-read.csv(here("data/lakeCat/NLCD2001.csv")) %>%
-#   rename(nhdplusv2_comid=COMID)%>%
-#   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-# NLCD2004 <-read.csv(here("data/lakeCat/NLCD2004.csv")) %>%
-#   rename(nhdplusv2_comid=COMID)%>%
-#   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-# NLCD2006 <-read.csv(here("data/lakeCat/NLCD2006.csv")) %>%
-#   rename(nhdplusv2_comid=COMID)%>%
-#   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-# NLCD2008 <-read.csv(here("data/lakeCat/NLCD2008.csv")) %>%
-#   rename(nhdplusv2_comid=COMID)%>%
-#   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-# NLCD2011 <-read.csv(here("data/lakeCat/NLCD2011.csv")) %>%
-#   rename(nhdplusv2_comid=COMID)%>%
-#   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-# NLCD2013 <-read.csv(here("data/lakeCat/NLCD2013.csv")) %>%
-#   rename(nhdplusv2_comid=COMID)%>%
-#   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-# NLCD2016 <-read.csv(here("data/lakeCat/NLCD2016.csv")) %>%
-#   rename(nhdplusv2_comid=COMID)%>%
-#   mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
-# 
-# colnames<-(intersect( colnames(NLCD2001),  colnames(NLCD2004))) #identify common columns between data.tables
-# NLCD<-left_join(NLCD2001,NLCD2004, by=colnames)
-# NLCD<-left_join(NLCD,NLCD2006, by=colnames)
-# NLCD<-left_join(NLCD,NLCD2008, by=colnames)
-# NLCD<-left_join(NLCD,NLCD2011, by=colnames)
-# NLCD<-left_join(NLCD,NLCD2013, by=colnames)
-# NLCD<-left_join(NLCD,NLCD2016, by=colnames)
-# NLCD<-semi_join(NLCD,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
-# names(NLCD)
+NLCD2001 <-read.csv(here("data/lakeCat/NLCD2001.csv")) %>%
+  rename(nhdplusv2_comid=COMID)%>%
+  mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
+NLCD2004 <-read.csv(here("data/lakeCat/NLCD2004.csv")) %>%
+  rename(nhdplusv2_comid=COMID)%>%
+  mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
+NLCD2006 <-read.csv(here("data/lakeCat/NLCD2006.csv")) %>%
+  rename(nhdplusv2_comid=COMID)%>%
+  mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
+NLCD2008 <-read.csv(here("data/lakeCat/NLCD2008.csv")) %>%
+  rename(nhdplusv2_comid=COMID)%>%
+  mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
+NLCD2011 <-read.csv(here("data/lakeCat/NLCD2011.csv")) %>%
+  rename(nhdplusv2_comid=COMID)%>%
+  mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
+NLCD2013 <-read.csv(here("data/lakeCat/NLCD2013.csv")) %>%
+  rename(nhdplusv2_comid=COMID)%>%
+  mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
+NLCD2016 <-read.csv(here("data/lakeCat/NLCD2016.csv")) %>%
+  rename(nhdplusv2_comid=COMID)%>%
+  mutate(nhdplusv2_comid=as.character(nhdplusv2_comid))
+
+colnames<-(intersect( colnames(NLCD2001),  colnames(NLCD2004))) #identify common columns between data.tables
+NLCD<-left_join(NLCD2001,NLCD2004, by=colnames)
+NLCD<-left_join(NLCD,NLCD2006, by=colnames)
+NLCD<-left_join(NLCD,NLCD2008, by=colnames)
+NLCD<-left_join(NLCD,NLCD2011, by=colnames)
+NLCD<-left_join(NLCD,NLCD2013, by=colnames)
+NLCD<-left_join(NLCD,NLCD2016, by=colnames)
+NLCD<-inner_join(NLCD,lakeIDs,by="nhdplusv2_comid")# All rows in a that have a match in b
+
+NLCD_long <- NLCD %>%
+  dplyr::select(lagoslakeid, nhdplusv2_comid,lake_nhdid,nhdplusv2_reachcode,lake_namegnis,
+                             lake_lon_decdeg, lake_lat_decdeg,
+                             contains("Pct"))%>%
+  pivot_longer(-(1:7), names_pattern = "([A-Za-z]+)(\\d+)([A-Za-z]+)", names_to = c("type","year","scale")) %>%
+  drop_na(type)
+# "([A-Za-z]+)" matches only letters, so will pull out just "Ws" or "Cat". "(\\d+)" matches digits and will pull out the year.
+
 # 
 # #Runoff
 # Runoff <-read.csv(here("data/lakeCat/Runoff.csv")) %>%
