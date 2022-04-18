@@ -2648,6 +2648,47 @@ color_normalized<-nested_beast %>%
                                year == yearBurn + 10 ~ 10)) %>%
   group_by(nhdplusv2_comid) %>%
   mutate(dwl_pred_norm = scale(dWL_pred))
+
+color_noramlized_alt <-nested_beast %>%
+        select(nhdplusv2_comid, pred_tcps) %>%
+        unnest(c(pred_tcps)) %>%
+        filter(nhdplusv2_comid %in% fire_trend_changes_over5$nhdplusv2_comid) %>%
+  left_join(., fire_trend_changes_over5 %>%
+              ungroup() %>%
+              select(nhdplusv2_comid, yearBurn, fire_cp, sign, tcp_Date) %>%
+              filter(fire_cp == "fire change") %>%
+              group_by(nhdplusv2_comid) %>%
+              arrange(tcp_Date) %>%
+              filter(row_number()==1)) %>%
+  mutate(year=year(date_dec)) %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(year >= yearBurn-10  & year <= yearBurn+10) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(year_norm = case_when(year == yearBurn ~ 0,
+                               year == yearBurn - 1 ~ -1,
+                               year == yearBurn - 2 ~ -2,
+                               year == yearBurn - 3 ~ -3,
+                               year == yearBurn - 4 ~ -4,
+                               year == yearBurn - 5 ~ -5,
+                               year == yearBurn - 6 ~ -6,
+                               year == yearBurn - 7 ~ -7,
+                               year == yearBurn - 8 ~ -8,
+                               year == yearBurn - 9 ~ -9,
+                               year == yearBurn - 10 ~ -10,
+                               year == yearBurn + 1 ~ 1,
+                               year == yearBurn + 2 ~ 2,
+                               year == yearBurn + 3 ~ 3,
+                               year == yearBurn + 4 ~ 4,
+                               year == yearBurn + 5 ~ 5,
+                               year == yearBurn + 6 ~ 6,
+                               year == yearBurn + 7 ~ 7,
+                               year == yearBurn + 8 ~ 8,
+                               year == yearBurn + 9 ~ 9,
+                               year == yearBurn + 10 ~ 10)) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(year_norm = as.factor(as.numeric(year_norm)),
+         fire_period = case_when(year < 0, "before",
+                                 year > 0, "after"))
 ```
 
 #### Visualized burned lakes (neg & pos responses)
