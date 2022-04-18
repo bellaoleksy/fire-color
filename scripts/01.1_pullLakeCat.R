@@ -107,7 +107,7 @@ NLCD_long <- NLCD %>%
                              lake_lon_decdeg, lake_lat_decdeg,
                              contains("Pct"))%>%
   pivot_longer(-(1:7), names_pattern = "([A-Za-z]+)(\\d+)([A-Za-z]+)", names_to = c("type","year","scale")) %>%
-  drop_na(type)
+  drop_na(type) 
 # "([A-Za-z]+)" matches only letters, so will pull out just "Ws" or "Cat". "(\\d+)" matches digits and will pull out the year.
 
 # 
