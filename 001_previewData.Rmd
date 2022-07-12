@@ -150,24 +150,48 @@ Looks promising, we have hundreds of lakes lakes that were close to forests fire
 ## Total annual number of lakes in burned watersheds/local catchments
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE,out.width = '100%', fig.height=4}
+
+##Format and export for JASM talk
+gg_title = str_wrap('Number of lakes in burned watersheds', 18)
+
+
+
 MTBS_summary %>%
-  pivot_longer(-1)%>%
-  ggplot(aes(x=as.numeric(as.character(year)),y=value, fill=name, color=name, group=name))+
-  geom_line()+
-  geom_point(shape=21, size=2.5)+
-  scale_color_manual(values=c("#90a955","#31572c"),
-                    labels=c("Local catchment","Full watershed"),
-                    name="Legend")+
-  scale_fill_manual(values=c("#90a955","#31572c"),
-                    labels=c("Local catchment","Full watershed"),
-                    name="Legend")+
-  scale_x_continuous(limits = c(1984, 2018),
-                     breaks = seq(1984, 2018, by = 2))+
+  # pivot_longer(-1)%>%
+  ggplot(aes(x=as.numeric(as.character(year)),y=n_lakes_Cat
+             # fill=name, color=name, group=name
+             ))+
+  geom_line(color="#90a955")+
+  geom_point(fill="#90a955",color="black",shape=21, size=2.5)+
+  # scale_color_manual(values=c("#90a955","#31572c"),
+  #                   labels=c("Local catchment","Full watershed"),
+  #                   name="Legend")+
+  # scale_fill_manual(values=c("#90a955","#31572c"),
+  #                   labels=c("Local catchment","Full watershed"),
+  #                   name="Legend")+
+  geom_smooth(method="gam",se=TRUE, fill="#90a955",color="#90a955")+
+  scale_x_continuous(limits = c(1985, 2020),
+                     breaks = seq(1985, 2020, by = 5))+
   labs(x="Year",
        y="n lakes",
-       title="Number of lakes in burned watersheds/local catchments")
-  # ggpubr::theme_pubr(base_size=8)+
-  # theme(axis.text.x=element_text(angle = 45, hjust = 1, size=8))
+       title=gg_title)+
+  # ggpubr::theme_pubr()
+  # theme()+
+    theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        # panel.border = element_rect(color="white"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000"))
+ggsave('figures/number_lakes_burned_over_time.png', width = 4, height = 5.7, units = "in", bg='transparent')
+
 ```
 
 Looks like there is a step-change increase in the number of lakes in burned watersheds in the early 2000s.
