@@ -7,24 +7,24 @@ plot_theme <- function(...) {
     cowplot::background_grid()+
     theme(
       plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in"),
-      plot.title = element_text(size = 12, face = "bold"),
-      plot.caption = element_text(size = 8),
-      plot.subtitle = element_text(size = 8),
-      axis.title = element_text(size = 8, face = "bold"),
+      plot.title = element_text(size = 16, face = "bold"),
+      plot.caption = element_text(size = 16),
+      plot.subtitle = element_text(size = 16),
+      axis.title = element_text(size = 16, face = "bold"),
       axis.title.y = element_text(margin = margin(r = 10, l = -10)),
       axis.title.x = element_text(margin = margin(t = 10, b = -10)),
       axis.text.x = element_text(
         angle = 45,
         hjust = 1,
-        size = 8
+        size = 16
       ),
-      axis.text.y = element_text(size = 8),
+      axis.text.y = element_text(size = 16),
       # strip.text = element_text(size=8),
-      legend.title = element_text(size = 8, face = "bold"),
-      legend.text = element_text(size = 8),
+      legend.title = element_text(size = 16, face = "bold"),
+      legend.text = element_text(size = 16),
       strip.background = element_blank(),
       strip.text = element_textbox(
-        size = 10,
+        size = 16,
         face = "bold",
         color = "#000000",
         fill = "#FFFFFF",
@@ -43,7 +43,52 @@ plot_theme <- function(...) {
   
 }
 
+dark_theme <- function(...) {
+  theme_pubr() +
+    cowplot::theme_half_open(12) +
+    cowplot::background_grid()+
+    theme(
+      plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in"),
+      plot.title = element_text(size = 16, face = "bold"),
+      plot.caption = element_text(size = 16),
+      plot.subtitle = element_text(size = 16),
+      axis.title = element_text(size = 16, face = "bold"),
+      axis.title.y = element_text(margin = margin(r = 10, l = -10)),
+      axis.title.x = element_text(margin = margin(t = 10, b = -10)),
+      # axis.text.x = element_text(
+      #   angle = 45,
+      #   hjust = 1,
+      #   size = 16
+      # ),
+      axis.text.y = element_text(size = 16),
+      # strip.text = element_text(size=8),
+      legend.title = element_text(size = 16, face = "bold"),
+      legend.text = element_text(size = 16),
+      strip.background = element_blank(),
+      strip.text = element_textbox(
+        size = 16,
+        face = "bold",
+        color = "#FFFFFF",
+        fill = "#000000",
+        box.color = "#000000",
+        halign = 0.5,
+        linetype = 1,
+        r = unit(2, "pt"),
+        width = unit(1, "npc"),
+        padding = margin(2, 0, 1, 0),
+        margin = margin(3, 3, 3, 3)
+      ),
+      
+      #additional settings passed to theme()
+      ...
+    )
+  
+}
+
+
+
 #Make default theme for all .R and .Rmd files
+# theme_set(dark_theme())
 theme_set(plot_theme())
 
 # Base ggplot2 theme for maps ------------------------------------------------------
@@ -84,6 +129,44 @@ map_theme <- function(caption.hjust=1, caption.vjust=0, ...) {
   )
 }
 
+
+
+# FUI - Create Forel-Ule Color table --------------------------------------
+
+
+
+#Connect dWL to the forel ule index for visualization
+#The Forel-Ule Index (FUI) is a useful comprehensive indicator to show the water colour variability and water quality change in both inland waters and oceans.
+fui.lookup <- tibble(dWL = c(471:583), fui = NA)
+fui.lookup$fui[fui.lookup$dWL <= 583] = 21
+fui.lookup$fui[fui.lookup$dWL <= 581] = 20
+fui.lookup$fui[fui.lookup$dWL <= 579] = 19
+fui.lookup$fui[fui.lookup$dWL <= 577] = 18
+fui.lookup$fui[fui.lookup$dWL <= 575] = 17
+fui.lookup$fui[fui.lookup$dWL <= 573] = 16
+fui.lookup$fui[fui.lookup$dWL <= 571] = 15
+fui.lookup$fui[fui.lookup$dWL <= 570] = 14
+fui.lookup$fui[fui.lookup$dWL <= 569] = 13
+fui.lookup$fui[fui.lookup$dWL <= 568] = 12
+fui.lookup$fui[fui.lookup$dWL <= 567] = 11
+fui.lookup$fui[fui.lookup$dWL <= 564] = 10
+fui.lookup$fui[fui.lookup$dWL <= 559] = 9
+fui.lookup$fui[fui.lookup$dWL <= 549] = 8
+fui.lookup$fui[fui.lookup$dWL <= 530] = 7
+fui.lookup$fui[fui.lookup$dWL <= 509] = 6
+fui.lookup$fui[fui.lookup$dWL <= 495] = 5
+fui.lookup$fui[fui.lookup$dWL <= 489] = 4
+fui.lookup$fui[fui.lookup$dWL <= 485] = 3
+fui.lookup$fui[fui.lookup$dWL <= 480] = 2
+fui.lookup$fui[fui.lookup$dWL <= 475 & fui.lookup$dWL >470] = 1
+
+
+# Actual Forel-Ule Colors
+fui.colors <- tibble(color = c(
+  "#2158bc", "#316dc5", "#327cbb", "#4b80a0", "#568f96", "#6d9298", "#698c86", 
+  "#759e72", "#7ba654", "#7dae38", "#94b660","#94b660", "#a5bc76", "#aab86d", 
+  "#adb55f", "#a8a965", "#ae9f5c", "#b3a053", "#af8a44", "#a46905", "#9f4d04"),
+  fui = 1:21)
 
 
 # Coefficient of variation (cv) -------------------------------------------
