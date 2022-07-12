@@ -32,3 +32,47 @@ head(lake_temperature)
 #' @param wtemp_ERA5* Predicted surface temperature from the ERA5 FLake model (Hersbach et al., 2020) with simple offset (+3.31°C; Willard et al., 2022) applied for the purpose of removing a cold bias in degrees C.
 #' @param wtemp_obs Observed surface temperature (Willard et al., 2022) in degrees C.
 #' @param obs_data_source  Data source name from monitoring group (Willard et al., 2022).
+ 
+#Pull in .nc data files ...
+# load the ncdf4 package
+library(ncdf4)
+# set path and filename
+# Tutorial from: https://pjbartlein.github.io/REarthSysSci/netCDF.html#reading-restructuring-and-writing-netcdf-files-in-r
+ncpath <- "~/Dropbox/dropbox Research/fire-color/data/temperature_willard/"
+ncname <- "01_predicted_temp_N24-53_W98-126"  
+ncfname <- paste(ncpath, ncname, ".nc", sep="")
+dname <- "surftemp"  # note: tmp means temperature (not temporary)
+
+# open a netCDF file
+ncin <- nc_open(ncfname)
+print(ncin)
+
+# get longitude and latitude
+lon <- ncvar_get(ncin,"lon")
+nlon <- dim(lon)
+head(lon)
+lat <- ncvar_get(ncin,"lat")
+nlat <- dim(lat)
+head(lat)
+print(c(nlon,nlat))
+#Get site ID
+site_id <- ncvar_get(ncin,"site_id")
+site_id
+
+# get temperature
+tmp_array <- ncvar_get(ncin,dname)
+dlname <- ncatt_get(ncin,dname,"long_name")
+dunits <- ncatt_get(ncin,dname,"units")
+fillvalue <- ncatt_get(ncin,dname,"missing_value")
+dim(tmp_array)
+names(tmp_array)
+# get global attributes
+standard_name_vocabulary <- ncatt_get(ncin,0,"standard_name_vocabulary")
+cdm_data_type <- ncatt_get(ncin,0,"cdm_data_type")
+featureType <- ncatt_get(ncin,0,"featureType")
+Conventions <- ncatt_get(ncin,0,"Conventions")
+
+
+# Reshaping from raster to rectangular ------------------------------------
+library(chron)
+
