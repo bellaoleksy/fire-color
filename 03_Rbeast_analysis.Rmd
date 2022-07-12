@@ -77,11 +77,11 @@ if (!require('here')) install.packages('here');library('here')
 ##https://rstats.wtf/project-oriented-workflow.html
 ## ^ ^ a little more on that
 
-source("fire-color/scripts/00_libraries.R")
-source("fire-color/scripts/00_helperFuns.R")
+# source("fire-color/scripts/00_libraries.R")
+# source("fire-color/scripts/00_helperFuns.R")
 
-# source("scripts/00_libraries.R")
-# source("scripts/00_helperFuns.R")
+source("scripts/00_libraries.R")
+source("scripts/00_helperFuns.R")
 
 
 
@@ -106,9 +106,9 @@ lakeCat <- readRDS(here("data_export", "lakeCat.rds"))
 #But I think I'm missing the burn severity numbers 
 MTBS_long <- lakeCat %>%
   dplyr::select(lagoslakeid, nhdplusv2_comid,lake_nhdid,nhdplusv2_reachcode,lake_namegnis,lake_rsvr_class,
-                lake_lon_decdeg, lake_lat_decdeg, lake_totalarea_ha, lake_maxdepth_m, lake_meandepth_m, sumBurn, burn_YN,
+                lake_lon_decdeg, lake_lat_decdeg, lake_waterarea_ha, lake_perimeter_m, lake_maxdepth_m, lake_meandepth_m, sumBurn, burn_YN,
                 contains("MTBS"))%>%
-  pivot_longer(-(1:13), names_pattern = "(\\d+)([A-Za-z]+)", names_to = c("year","scale"))
+  pivot_longer(-(1:14), names_pattern = "(\\d+)([A-Za-z]+)", names_to = c("year","scale"))
     # "([A-Za-z]+)" matches only letters, so will pull out just "Ws" or "Cat". "(\\d+)" matches digits and will pull out the year.
 
 ```
@@ -154,7 +154,7 @@ length(unique(srCor_comid_NAfree$nhdplusv2_comid))
 MTBS_severe<-MTBS_long %>%
   filter(value>90)%>%
   filter(scale=="Cat") %>%
-  dplyr::select(nhdplusv2_comid,lake_totalarea_ha,value,year) %>%
+  dplyr::select(nhdplusv2_comid,lake_waterarea_ha,value,year) %>%
   rename(yearBurn=year) %>%
   group_by(nhdplusv2_comid) %>%
   arrange(yearBurn) %>%
@@ -167,7 +167,7 @@ MTBS_severe<-MTBS_long %>%
 MTBS_moderate<-MTBS_long %>%
   filter(value>=1)%>%
   filter(scale=="Cat") %>%
-  dplyr::select(nhdplusv2_comid,lake_totalarea_ha,value,year) %>%
+  dplyr::select(nhdplusv2_comid,lake_waterarea_ha,value,year) %>%
   rename(yearBurn=year) %>%
   group_by(nhdplusv2_comid) %>%
   arrange(yearBurn) %>%
@@ -180,7 +180,7 @@ MTBS_noburn <- MTBS_long %>%
   group_by(nhdplusv2_comid) %>%
   filter(sum(value)==0) %>%
   filter(scale=="Cat") %>%
-  dplyr::select(nhdplusv2_comid)
+  dplyr::select(nhdplusv2_comid, lake_waterarea_ha)
 
 
 colorSevereBurn<-left_join(MTBS_severe,srCor_comid_NAfree,by="nhdplusv2_comid") %>%
@@ -222,15 +222,94 @@ save(colorSevereBurn, colorModtoSevereBurn, MTBS_moderate, MTBS_severe, MTBS_lon
 save(colorNoBurn, colorNoBurn_subset, file="data_export/noBurn.RData")
 
 # write_feather(colorNoBurn_subset, "data_export/colorNoBurn_subset.feather")
+
+
+## Export for Xiao and Michael
+
+#For unburned lakes, there are like 20,000+ total, so let's get a subset of different size classes
+
+#What if we want to sample a distribution of lakes that didn't burn that matches lakes that did burn...?
+MTBS_allsites <- MTBS_long %>%
+  filter(scale=="Cat") %>%
+  group_by(nhdplusv2_comid,lake_lon_decdeg,lake_lat_decdeg,lake_waterarea_ha,lake_perimeter_m) %>%
+  slice(which.max(value)) %>%
+  mutate(burn_type = case_when(value == 0 ~ "unburned",
+                                 value > 0 ~ "burned")) %>%
+  left_join(., lakeCat %>% select(nhdplusv2_comid,lake_elevation_m)) 
+  # summarize(total_area_burned=sum(value,na.rm=TRUE)) %>%
+  #   mutate(burn_type = case_when(total_area_burned == 0 ~ "unburned",
+  #                                total_area_burned > 0 ~ "burned"))
+
+MTBS_allsites %>%
+  group_by(burn_type) %>%
+  count()
+
+#How does the distribution of lake sizes look between the two?
+MTBS_allsites %>%
+  ggplot(aes(x=log10(lake_waterarea_ha)))+
+  geom_histogram()+
+  facet_wrap(burn_type~., scales="free_y")
+#Honestly pretty similar but let's take a subsample of the unburned sites that has a lake area distribution matching the unburned sites
+
+
+#https://stackoverflow.com/questions/63326846/sample-from-data-frame-based-on-distribution
+area <- MTBS_allsites$lake_waterarea_ha[MTBS_allsites$burn_type == "burned"]
+dist.fun.area <- approxfun(density(area))
+
+MTBS_subset_area <- MTBS_allsites %>%
+  group_by(burn_type) %>% 
+  slice_sample(n = 5000, weight_by = dist.fun.area(lake_waterarea_ha)) %>%
+  ungroup()
+
+MTBS_subset_area %>%
+  group_by(burn_type) %>%
+  count()
+
+
+#Now how does the distribution look?
+MTBS_subset_area %>%
+  ggplot(aes(x=log10(lake_waterarea_ha)))+
+  geom_histogram()+
+  facet_wrap(burn_type~.) +
+MTBS_subset_area %>%
+  ggplot(aes(x=log10(lake_perimeter_m)))+
+  geom_histogram()+
+  facet_wrap(burn_type~.)  
+
+
+
+length(unique(MTBS_subset$nhdplusv2_comid))
+#5410
+
+#How many sites do we drop if we specify that the lake has to be 90m on a side?
+# less<-MTBS_subset %>%
+#   filter(lake_perimeter_m >=282)
+# length(unique(less$nhdplusv2_comid))
+#none. we are fine.
+
+MTBS_subset %>%
+  group_by(burn_type) %>%
+  count()
+
+MTBS_subset_export <- MTBS_subset %>%
+  dplyr::select(nhdplusv2_comid, lake_nhdid, nhdplusv2_reachcode, lake_lat_decdeg, lake_lon_decdeg, lake_waterarea_ha, lake_perimeter_m)
+
+head(MTBS_subset_export)
+
+write.csv(MTBS_subset_export, "data_export/westernUSlakes_greaterthan1ha_unburnedsubset.csv")
+
+
+
+
 ```
 
 ```{r}
-load('fire-color/data_export/rbeast_data.RData')
-# load('fire-color/data_export/noBurn.RData')
+# base::load('fire-color/data_export/rbeast_data.RData')
+# base::load('fire-color/data_export/noBurn.RData')
 
 
-# load('data_export/rbeast_data.RData')
-# load('data_export/noBurn.RData')
+base::load('data_export/rbeast_data.RData')
+# base::load('data_export/noBurn.RData')
 ```
 
 ```{r}
@@ -362,7 +441,7 @@ colorSevereBurn_trim %>%
 Before we build the model pipeline, I want to demonstrate what sort of output we can get from the models. Using Big Lake in AZ as an example, I'll summarize all the data to the monthly timescale and make all the missing data implicit with the `tsibble::fillgaps()` function. 
 
 ```{r, echo=TRUE,  message=FALSE, warning=FALSE}
-dat <- colorSevereBurn_trim %>%
+dat <- colorModtoSevereBurn_trim %>%
   # mutate(month=month(date)) %>%
   arrange(date) %>%
   group_by(year, month, nhdplusv2_comid) %>%
@@ -391,6 +470,21 @@ dat_20493267 <- dat %>%
   unnest(data) %>%
   left_join(., MTBS_severe %>%
               select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") #add yearBur for comparison with cp
+
+#Example for change in seasonality/variability... 
+dat_23061964 <- dat %>%
+  filter(nhdplusv2_comid == "23061964") %>%
+  unnest(data) %>%
+  left_join(., MTBS_severe %>%
+              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") 
+
+#Example of Clear Lake, CA but we don'thave 5 years of post-fire data.
+dat_15032791 <- dat %>%
+  filter(nhdplusv2_comid == "15032791") %>%
+  unnest(data) %>%
+  left_join(., MTBS_moderate %>%
+              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") 
+
 ```
 
 We use the `beast.irreg` function which can accomodate missing data. the `deltat` term refers to the time interval, which in our case is monthly data. The unit is assumed to be YEAR so 1/12 means month.
@@ -399,6 +493,62 @@ The `freq` term refers to the number of samples/datapoints per cycle, and here I
 ```{r, echo=TRUE,  results=FALSE, class.source = 'fold-show'}
 o=beast.irreg(dat_20493267$value, time=dat_20493267$date,deltat=1/12, freq=12)
 plot(o)
+
+# 1. Open jpeg file
+png("figures/JASM/Rbeast_demo.png", width = 900, height = 1600, res=300)
+plot(
+     o, 
+     # index = 1,
+     vars  = c('st','t','tcp','o','ocp'),  
+     col         = NULL, 
+     main        = "Big Lake, Arizona",
+     xlab        = 'Time',
+     ylab        = NULL,
+     cex.main    = 1,
+     cex.lab     = 1,
+     # relative.heights = NULL,
+     interactive = FALSE,
+     ncpStat     = c('max')
+   ) 
+dev.off()
+
+
+o=beast.irreg(dat_23061964$value, time=dat_23061964$date,deltat=1/12, freq=12)
+plot(
+     o, 
+     # index = 1,
+     vars  =  c('st','t','tcp','torder','o','ocp','error'),
+     col         = NULL, 
+     main        = "Black Lake, WA",
+     xlab        = 'Time',
+     ylab        = NULL,
+     cex.main    = 1,
+     cex.lab     = 1,
+     # relative.heights = NULL,
+     interactive = FALSE,
+     ncpStat     = c('max')
+   ) 
+
+
+
+o=beast.irreg(dat_15032791$value, time=dat_15032791$date,deltat=1/12, freq=12)
+plot(
+     o, 
+     # index = 1,
+     vars  =  c('st','t','tcp','torder','o','ocp','error'),
+     col         = NULL, 
+     main        = "Black Lake, WA",
+     xlab        = 'Time',
+     ylab        = NULL,
+     cex.main    = 1,
+     cex.lab     = 1,
+     # relative.heights = NULL,
+     interactive = FALSE,
+     ncpStat     = c('max')
+   ) 
+
+
+names(dat_15032791)
 ```
 
 We can recreate a version of this plot in ggplot2 by extracting the elements we want from the model output.
@@ -747,6 +897,7 @@ colorModtoSevereBurn_trim <- colorModtoSevereBurn %>%
       as.character(yearBurn)
     )))
   ) %>%
+  filter(value>=5) %>% #Lakes over 5% burn
   mutate(dWL = replace(dWL, dWL < 470, NA),
          dWL = replace(dWL, dWL > 583, NA)) %>%
   drop_na(dWL) %>%
@@ -827,13 +978,14 @@ nested_beast <- colorModtoSevereBurn_trim %>%
   ) 
 gc()#Free up memory
 end_time <- Sys.time()
-save(nested_beast, file="data_export/nested_beast_20220412.RData")
+save(nested_beast, file="data_export/nested_beast_20220505.RData")
 ```
 
 ```{r}
-# load('fire-color/data_export/nested_beast_20220226.RData')
-# load('data_export/nested_beast_20220226.RData')
-load('data_export/nested_beast_20220412.RData')
+# base::load('fire-color/data_export/nested_beast_20220226.RData')
+# base::load('data_export/nested_beast_20220226.RData')
+# base::load('data_export/nested_beast_20220412.RData')
+base::load('data_export/nested_beast_20220505.RData') #only difference here from earlier version is only includes burns over 5% of watershed area
 ```
 The model takes a bit longer to run this time of course, at about `r round(end_time - start_time,1)` minutes.
 
@@ -1173,6 +1325,133 @@ nested_beast %>%
 
 # ggsave("figures/04_all_lakes_with_mcp.jpg", width = 18, height = 16, units = 'in')
 ```
+
+All sites with a SINGLE changepoint
+```{r}
+mcp_subset<-fire_trend_changes_over5 %>%
+  filter(fire_cp=="fire change") %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(changepoint_number = row_number()) %>%
+  mutate(nhdplusv2_comid=as.factor(as.character(nhdplusv2_comid)),
+         changepoint_number=as.factor(as.numeric(changepoint_number))) %>%
+  mutate(mcp = case_when(length(unique(changepoint_number)) > 1 ~ "yes",
+                         TRUE ~ "no")) %>%
+  filter(mcp=="no")
+
+length(unique(mcp_subset$nhdplusv2_comid))
+
+mcp_pred_subset<-
+nested_beast %>%
+      filter(nhdplusv2_comid %in% mcp_subset$nhdplusv2_comid) %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) 
+
+nested_beast %>%
+  select(nhdplusv2_comid, data) %>%
+  unnest(c(data)) %>%
+  filter(nhdplusv2_comid %in% mcp_subset$nhdplusv2_comid) %>%
+  mutate(nhdplusv2_comid = as.factor(as.character(nhdplusv2_comid))) %>%
+  left_join(
+    .,
+    nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% mcp_subset$nhdplusv2_comid) %>%
+      rename(date = date_dec),
+    by = c("nhdplusv2_comid", "date")
+  ) %>%
+  inner_join(., MTBS_moderate %>%
+               select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") %>%
+  left_join(., mcp_subset %>% select(nhdplusv2_comid, cpPR, fire_cp)) %>%
+    mutate(dWL=round(dWL, digits=0))%>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+  group_by(nhdplusv2_comid) %>%
+  distinct(date, .keep_all = TRUE) %>% #For some reason a million duplicates were showing up
+  ungroup()%>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(dWL_pred=zoo::na.approx(dWL_pred, na.rm=FALSE),
+         dWL_pred_CI_high=zoo::na.approx(dWL_pred_CI_high, na.rm=FALSE),
+         dWL_pred_CI_low=zoo::na.approx(dWL_pred_CI_low, na.rm=FALSE))%>% #Need to interpolate values for plotting
+  ggplot() +
+  facet_wrap( ~ fct_reorder(nhdplusv2_comid, cpPR, .desc = TRUE), scales =
+                "free_y", ncol=4) +
+  #Add confidence intervals around changepoint
+  geom_rect(
+    data = nested_beast %>%
+      unnest(c(tcps)) %>%
+      filter(tcp_CI_low %in% mcp_subset$tcp_CI_low),
+    aes(
+      xmin = tcp_CI_low,
+      xmax = tcp_CI_high,
+      ymin = -Inf,
+      ymax = Inf
+    ),
+    color = "pink",
+    fill = "pink"
+  ) +
+    #Points for raw dWL
+  geom_point(aes(x = decimal_date(date), y = dWL, color = color),
+             size = 1.5) +
+  scale_color_identity() +
+  #Add CI around fitted trend
+  geom_ribbon(aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = decimal_date(date)
+  ),
+  inherit.aes = FALSE,
+  alpha=0.9,
+  fill = "#dee2ff") +
+  #Add line for predicted dwl trend
+  geom_line(aes(x = decimal_date(date), y = dWL_pred), color="#8e9aaf") +
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = decimal_date(yearBurn)),
+             color = "red",
+             size = 0.5) +
+  #Add vertical line for exact trend changepoint
+  geom_vline(
+    data = nested_beast %>%
+      unnest(c(tcps)) %>%
+      filter(tcp_CI_low %in% mcp_subset$tcp_CI_low),
+    aes(xintercept = decimal_date(as.Date(
+      as.character(tcp_Date), format = "%Y"
+    ))),
+    linetype = "dashed",
+    size = 0.5
+  ) +
+  #Add the cpPR on each panel
+  geom_richtext(
+    data = mcp_subset,
+    aes(
+      x = -Inf,
+      y = Inf,
+      hjust = -0.1,
+      vjust = 1.5,
+      label = paste0("cpPR=", round(cpPR, 1))
+    ),
+    stat = "unique",
+    color = "black",
+    fill = "#f9dcc4",
+    size = 2
+  ) +
+  theme(strip.text.x = element_textbox(
+    size = 10,
+    fill = "grey40",
+    box.color = "#000000"
+  )) +
+  labs(y = "Observed dominant wavelength (nm)",
+       x = "Year",
+       title = "Lakes where >5% of the watershed burned",
+       subtitle ="Only sites with a single changepoint") +
+  cowplot::panel_border() +
+  cowplot::background_grid()
+
+ggsave("figures/04b_all_lakes_with_one_changpt.jpg", width = 18, height = 16, units = 'in')
+
+```
+
 
 ### Case studies / closer look
 
@@ -2142,8 +2421,8 @@ BurnClassCount<-fire_trend_changes_over5 %>%
     filter(nhdplusv2_comid %in% colorModtoSevereBurn_trim$nhdplusv2_comid) %>%
   group_by(nhdplusv2_comid)  %>%
   # slice(which.max(value)) %>% # We have duplicate rows of observations and this picks just the year of the burn
-  mutate(burnSeverityClass = cut(value, breaks = c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
-                                 labels = c("1-10%","10-20%","20-30%","30-40%","40-50%","50-60%",
+  mutate(burnSeverityClass = cut(value, breaks = c(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+                                 labels = c("5-10%","10-20%","20-30%","30-40%","40-50%","50-60%",
                                             "60-70%","70-80%","80-90%","90-100%"),
                                  ordered_result = TRUE)) %>%
   group_by(nhdplusv2_comid, burnSeverityClass, fire_cp) %>%
@@ -2410,6 +2689,224 @@ fire_trend_changes_over5 %>%
 # ggsave("figures/mcp_responses.jpg", width = 8, height = 6, units = 'in', dpi=600)
 ```
 
+#### Manually calculate abrupt change
+##### 1 year before and after fire
+```{r}
+
+#First, get the 1st fire changepoint for every lake
+first_fire<-  fire_trend_changes_over5 %>%
+    # mutate(dWL_pred=round(dWL_pred, digits=0))%>%
+    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+  ungroup() %>%
+  filter(fire_cp=="fire change") %>%
+  group_by(nhdplusv2_comid, fire_cp) %>%
+  filter(row_number()==1)
+
+
+raw_dwl_change<-nested_beast %>%
+  select(nhdplusv2_comid, data) %>%
+  unnest(c(data)) %>%
+  filter(nhdplusv2_comid %in% first_fire$nhdplusv2_comid) %>%
+  left_join(., first_fire, by="nhdplusv2_comid") %>%
+  #Retain only 1 year before and after the changepoint date
+  filter(date <= tcp_Date + years(1)) %>%
+  filter(date > tcp_Date - years(1)) %>%
+  #Create manual AbruptChange calculation
+  mutate(
+    changepoint_timeperiod = case_when(
+      date <= tcp_Date ~ 'before changepoint',
+      date > tcp_Date ~ 'after changepoint'
+    )
+  ) %>%
+  group_by(nhdplusv2_comid, changepoint_timeperiod) %>%
+  summarize(median_dWL_raw=median(dWL, na.rm=TRUE)) %>%
+  pivot_wider(names_from=changepoint_timeperiod,
+              values_from=median_dWL_raw)%>%
+  mutate(cpAbruptChange_raw = `after changepoint` - `before changepoint`)
+
+
+pred_dwl_change<-nested_beast %>%
+  select(nhdplusv2_comid, pred_tcps) %>%
+  unnest(c(pred_tcps))  %>%
+  filter(nhdplusv2_comid %in% first_fire$nhdplusv2_comid) %>%
+  left_join(., first_fire, by="nhdplusv2_comid") %>%
+  #Retain only 1 year before and after the changepoint date
+  filter(date_dec <= tcp_Date + years(1)) %>%
+  filter(date_dec > tcp_Date - years(1)) %>%
+  #Create manual AbruptChange calculation
+  mutate(
+    changepoint_timeperiod = case_when(
+      date_dec <= tcp_Date ~ 'before changepoint',
+      date_dec > tcp_Date ~ 'after changepoint'
+    )
+  ) %>%
+  group_by(nhdplusv2_comid, changepoint_timeperiod) %>%
+  summarize(median_dWL_pred=median(dWL_pred, na.rm=TRUE)) %>%
+  pivot_wider(names_from=changepoint_timeperiod,
+              values_from=median_dWL_pred) %>%
+  mutate(cpAbruptChange_pred = `after changepoint` - `before changepoint`)
+
+
+# Are the predicted and raw dwl changes comparable?
+left_join(raw_dwl_change,pred_dwl_change, by="nhdplusv2_comid") %>%
+  ggplot(aes(x=cpAbruptChange_raw,y=cpAbruptChange_pred))+
+  geom_point()
+
+#Are predicted comparable to the model output?
+left_join(first_fire,pred_dwl_change, by="nhdplusv2_comid") %>%
+  ggplot(aes(x=cpAbruptChange,y=cpAbruptChange_pred))+
+  geom_point()
+
+#Are raw comparable to the model output?
+left_join(first_fire,raw_dwl_change, by="nhdplusv2_comid") %>%
+  ggplot(aes(x=cpAbruptChange,y=cpAbruptChange_raw))+
+  geom_point()
+
+#Any relationship between the magnitude of raw dWL change and burn severity class?
+raw_dwl_change %>%
+  left_join(., MTBS_moderate %>% mutate(yearBurn = as.numeric(as.character(yearBurn)))) %>%
+  group_by(nhdplusv2_comid)  %>%
+  mutate(burnSeverityClass = cut(
+    value,
+    breaks = c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+    labels = c(
+      "1-10%",
+      "10-20%",
+      "20-30%",
+      "30-40%",
+      "40-50%",
+      "50-60%",
+      "60-70%",
+      "70-80%",
+      "80-90%",
+      "90-100%"
+    ),
+    ordered_result = TRUE
+  )) %>%
+    mutate(
+    sign = case_when(
+      cpAbruptChange_raw > 0 ~ 'positive',
+      cpAbruptChange_raw <= 0 ~ 'negative'
+    )
+  )%>%
+  filter(sign %in% c("positive","negative")) %>%
+  ggplot(aes(x = burnSeverityClass, y = cpAbruptChange_raw, fill = burnSeverityClass)) +
+  geom_violin() +
+  geom_jitter(
+    shape = 21,
+    color = "black",
+    size = 1.5,
+    width = 0.1
+  ) +
+  scale_fill_discrete_sequential(palette = "Reds") +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 11)) +
+  labs(y = "Magnitude of dWL change, calculated from raw dWL (nm)",
+       x = "Burn severity class (% of local catchment)")+
+    facet_wrap(~sign)
+
+#As a continuous relationship?
+raw_dwl_change %>%
+  left_join(., MTBS_moderate %>% mutate(yearBurn = as.numeric(as.character(yearBurn)))) %>%
+    mutate(
+    sign = case_when(
+      cpAbruptChange_raw > 0 ~ 'positive',
+      cpAbruptChange_raw <= 0 ~ 'negative'
+    )
+  )%>%
+  filter(sign %in% c("positive","negative")) %>%
+  ggplot(aes(x = value, y = cpAbruptChange_raw)) +
+  geom_point(size=3,shape=21)+
+  labs(y = "Magnitude of dWL change, calculated from raw dWL (nm)",
+       x = "% watershed burn")+
+  geom_smooth(method="lm",se=FALSE)+
+  facet_wrap(~sign, scales="free_y")
+
+
+
+#Any relationship between the magnitude of predicted dWL change and burn severity class?
+pred_dwl_change %>%
+  left_join(., MTBS_moderate %>% mutate(yearBurn = as.numeric(as.character(yearBurn)))) %>%
+  group_by(nhdplusv2_comid)  %>%
+  mutate(burnSeverityClass = cut(
+    value,
+    breaks = c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+    labels = c(
+      "1-10%",
+      "10-20%",
+      "20-30%",
+      "30-40%",
+      "40-50%",
+      "50-60%",
+      "60-70%",
+      "70-80%",
+      "80-90%",
+      "90-100%"
+    ),
+    ordered_result = TRUE
+  )) %>%
+    mutate(
+    sign = case_when(
+      cpAbruptChange_pred > 0 ~ 'positive',
+      cpAbruptChange_pred <= 0 ~ 'negative'
+    )
+  )%>%
+  filter(sign %in% c("positive","negative")) %>%
+  ggplot(aes(x = burnSeverityClass, y = cpAbruptChange_pred, fill = burnSeverityClass)) +
+  geom_violin() +
+  geom_jitter(
+    shape = 21,
+    color = "black",
+    size = 1.5,
+    width = 0.1
+  ) +
+  scale_fill_discrete_sequential(palette = "Reds") +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 11)) +
+  labs(y = "Magnitude of dWL change, calculated from pred dWL (nm)",
+       x = "Burn severity class (% of local catchment)")+
+    facet_wrap(~sign)
+
+#As a continuous relationship?
+pred_dwl_change %>%
+  left_join(., MTBS_moderate %>% mutate(yearBurn = as.numeric(as.character(yearBurn)))) %>%
+    mutate(
+    sign = case_when(
+      cpAbruptChange_pred > 0 ~ 'positive',
+      cpAbruptChange_pred <= 0 ~ 'negative'
+    )
+  )%>%
+  filter(sign %in% c("positive","negative")) %>%
+  ggplot(aes(x = value, y = cpAbruptChange_pred)) +
+  geom_point(size=3,shape=21)+
+  labs(y = "Magnitude of dWL change, calculated from pred dWL (nm)",
+       x = "% watershed burn")+
+  geom_smooth(method="lm",se=FALSE)+
+  facet_wrap(~sign, scales="free_y")
+#Looks a little better than raw values but still no relationship with % burn.
+
+
+#What happens if we filter out relatively low tcp probabilities? Say < 0.5.
+pred_dwl_change %>%
+  left_join(., MTBS_moderate %>% select(-yearBurn)) %>%
+    mutate(
+    sign_pred = case_when(
+      cpAbruptChange_pred > 0 ~ 'positive',
+      cpAbruptChange_pred <= 0 ~ 'negative'
+    )
+  )%>%
+  left_join(., first_fire, by=c("nhdplusv2_comid"))
+  filter(sign %in% c("positive","negative")) %>%
+  ggplot(aes(x = value, y = cpAbruptChange_pred)) +
+  geom_point(size=3,shape=21)+
+  labs(y = "Magnitude of dWL change, calculated from pred dWL (nm)",
+       x = "% watershed burn")+
+  geom_smooth(method="lm",se=FALSE)+
+  facet_wrap(~sign, scales="free_y")
+
+
+```
 
 #### Explore a few lakes
 ```{r}
@@ -2473,6 +2970,133 @@ fire_trend_changes_over5 %>%
       filter(nhdplusv2_comid %in% c("23661584")),
     aes(x = as.Date(date_dec), y = dWL_pred)
   ) +
+    scale_color_identity() +
+    #Raw data
+    geom_point(aes(color=color))+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")+
+  labs(title="Willow Lake (Reservoir), OR")
+
+
+#A case where cpAbruptChange is positive, but the calculated chnage is zero
+#It turns out the reason for this discrepancy is because the change is very quick (toward green) but the lake seems to recover very quickly too (toward blue)
+  fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% c("20341411")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("20341411"))
+    ) %>%
+      mutate(dWL=round(dWL, digits=0))%>%
+    left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    #Show only the most relevant changepoints, so it's not as distracting
+    filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_high < yearBurn +years(5)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+    geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("20341411")),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("20341411")),
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_color_identity() +
+    #Raw data
+    geom_point(aes(color=color))+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")
+  
+# A case where the model detects a sudden drop but in the manual calculation it looks like the lake got greener  
+fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% c("22971746")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("22971746"))
+    ) %>%
+      mutate(dWL=round(dWL, digits=0))%>%
+    left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    #Show only the most relevant changepoints, so it's not as distracting
+    filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_high < yearBurn +years(5)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+    geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  # geom_ribbon(data = nested_beast %>%
+  #     select(nhdplusv2_comid, pred_tcps) %>%
+  #     unnest(c(pred_tcps)) %>%
+  #     filter(nhdplusv2_comid %in% c("22971746")),
+  #     aes(
+  #   ymin = (dWL_pred_CI_low),
+  #   ymax = (dWL_pred_CI_high),
+  #   x = as.Date(date_dec)
+  # ),
+  # inherit.aes = FALSE,
+  # fill = "grey50") +
+  #   #Add line for predicted dwl trend
+  # geom_line(
+  #   data = nested_beast %>%
+  #     select(nhdplusv2_comid, pred_tcps) %>%
+  #     unnest(c(pred_tcps)) %>%
+  #     filter(nhdplusv2_comid %in% c("22971746")),
+  #   aes(x = as.Date(date_dec), y = dWL_pred)
+  # ) +
     scale_color_identity() +
     #Raw data
     geom_point(aes(color=color))+
@@ -2649,18 +3273,299 @@ color_normalized<-nested_beast %>%
   group_by(nhdplusv2_comid) %>%
   mutate(dwl_pred_norm = scale(dWL_pred))
 
-color_noramlized_alt <-nested_beast %>%
-        select(nhdplusv2_comid, pred_tcps) %>%
-        unnest(c(pred_tcps)) %>%
-        filter(nhdplusv2_comid %in% fire_trend_changes_over5$nhdplusv2_comid) %>%
-  left_join(., fire_trend_changes_over5 %>%
-              ungroup() %>%
-              select(nhdplusv2_comid, yearBurn, fire_cp, sign, tcp_Date) %>%
-              filter(fire_cp == "fire change") %>%
-              group_by(nhdplusv2_comid) %>%
-              arrange(tcp_Date) %>%
-              filter(row_number()==1)) %>%
-  mutate(year=year(date_dec)) %>%
+#How many lakes with 10 years pre and post fire data?
+length(unique(color_normalized$nhdplusv2_comid))
+
+# color_normalized_alt <-nested_beast %>%
+#         select(nhdplusv2_comid, pred_tcps) %>%
+#         unnest(c(pred_tcps)) %>%
+#         filter(nhdplusv2_comid %in% fire_trend_changes_over5$nhdplusv2_comid) %>%
+#   left_join(., fire_trend_changes_over5 %>%
+#               ungroup() %>%
+#               select(nhdplusv2_comid, yearBurn, fire_cp, sign, tcp_Date) %>%
+#               filter(fire_cp == "fire change") %>%
+#               group_by(nhdplusv2_comid) %>%
+#               arrange(tcp_Date) %>%
+#               filter(row_number()==1)) %>%
+#   mutate(year=year(date_dec)) %>%
+#   group_by(nhdplusv2_comid) %>%
+#   filter(year >= yearBurn-10  & year <= yearBurn+10) %>%
+#   group_by(nhdplusv2_comid) %>%
+#   mutate(year_norm = case_when(year == yearBurn ~ 0,
+#                                year == yearBurn - 1 ~ -1,
+#                                year == yearBurn - 2 ~ -2,
+#                                year == yearBurn - 3 ~ -3,
+#                                year == yearBurn - 4 ~ -4,
+#                                year == yearBurn - 5 ~ -5,
+#                                year == yearBurn - 6 ~ -6,
+#                                year == yearBurn - 7 ~ -7,
+#                                year == yearBurn - 8 ~ -8,
+#                                year == yearBurn - 9 ~ -9,
+#                                year == yearBurn - 10 ~ -10,
+#                                year == yearBurn + 1 ~ 1,
+#                                year == yearBurn + 2 ~ 2,
+#                                year == yearBurn + 3 ~ 3,
+#                                year == yearBurn + 4 ~ 4,
+#                                year == yearBurn + 5 ~ 5,
+#                                year == yearBurn + 6 ~ 6,
+#                                year == yearBurn + 7 ~ 7,
+#                                year == yearBurn + 8 ~ 8,
+#                                year == yearBurn + 9 ~ 9,
+#                                year == yearBurn + 10 ~ 10)) %>%
+#   group_by(nhdplusv2_comid) %>%
+#   mutate(fire_period = case_when(year_norm < 0 ~ "before",
+#                                  year_norm > 0 ~ "after")) %>%
+#   group_by(nhdplusv2_comid, fire_period) %>%
+#   mutate(mean_dWL=mean(dWL_pred,na.rm=TRUE),
+#          sd_dWL=sd(dWL_pred, na.rm=TRUE)) %>%
+#   pivot_wider(names_from = fire_period, values_from = c(mean_dWL,sd_dWL)) %>%
+#   arrange(mean_dWL_before) %>%
+#   mutate(mean_dWL_before = mean_dWL_before[1]) %>%#fill in NA gaps with the 'before' value for each lake
+#   arrange(sd_dWL_before) %>%
+#   mutate(sd_dWL_before = sd_dWL_before[1]) %>% #fill in NA gaps with the 'before' sd value for each lake
+#   select(-contains("_NA"),-contains("after")) %>%
+#   group_by(nhdplusv2_comid) %>%
+#   mutate(dwl_pred_zscore = (dWL_pred-mean_dWL_before)/sd_dWL_before,
+#          dwl_pred_norm = scale(dwl_pred_zscore),
+#          dwl_pred_original = scale(dWL_pred))
+# 
+# data$zScore<-(data$value-mean(data$value[data$group==1]))/sd(data$value[data$group==1])
+# 
+# 
+# #How do new z-score and old scaled values compare?
+# color_normalized_alt %>%
+#   mutate(fire_period = case_when(year_norm < 0 ~ "before",
+#                                  year_norm > 0 ~ "after")) %>%
+#   mutate(dwl_pred_norm_z=scale(dwl_pred_norm)) %>%
+#   ggplot(aes(x=dwl_pred_norm_z,y=dwl_pred_original,fill=fire_period))+
+#   geom_point(shape=21,size=2.5)
+```
+
+#### Visualized burned lakes (neg & pos responses)
+```{r}
+
+
+
+##ALL DATA
+#Extract the median normalized color at year zero
+yearZero <-
+  color_normalized %>%
+  ungroup() %>%
+  # filter(year_norm == 0) %>% #year zero
+  filter(year_norm > -10 & year_norm < 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm))%>%
+    mutate(sign=factor(sign,
+                     levels=c("positive","negative"),
+                     labels=c("greener","bluer"))) 
+  # pull()
+color_normalized  %>%
+  mutate(sign=factor(sign,
+                     levels=c("positive","negative"),
+                     labels=c("greener","bluer"))) %>%
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero, color="white") +
+  geom_boxplot(size=0.5, width=0.5, color="white") +
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
+       x="Years since fire") +
+    ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white"),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        panel.border = element_rect(color="black"),
+        panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="black"),
+        legend.position ="none"
+        )
+  # theme(axis.text.x = element_text(
+  #       angle = 0,
+  #       hjust = 1,
+  #       size = 8
+  #     ),
+  #     legend.position="none",
+  #     plot.background = element_rect(fill="white"))
+ggsave("figures/JASM/dwl_change_by_sign_allData.png", width = 12, height = 6, units = 'in')
+
+##ANNUAL MEDIAN
+#Extract the median normalized color at year zero
+# yearZero <-
+#   color_normalized %>%
+#   group_by(nhdplusv2_comid, year_norm, sign) %>%
+#   summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+#   ungroup()%>%
+#   filter(year_norm == 0) %>%
+#     group_by(sign) %>%
+#   summarize(dwl_pred_norm=median(dwl_pred_norm)) 
+#   # pull()
+# color_normalized  %>%
+#   # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+#   group_by(nhdplusv2_comid, year_norm, sign) %>%
+#   summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+#   ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+#   geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero) +
+#   geom_boxplot(size=0.5, width=0.5) +
+#   facet_wrap(~sign) + 
+#   scale_fill_manual(values=c('#1f78b4','#33a02c'))+
+#   scale_x_continuous(breaks=seq(-10,10,1))+
+#   labs(y="Annual median dwl (normalized by lake)",
+#        x="Years since fire",
+#        title="Annual median")+
+#   theme(axis.text.x = element_text(
+#         angle = 0,
+#         hjust = 1,
+#         size = 8
+#       ),
+#       legend.position="none",
+#       plot.background = element_rect(fill="white"))
+# ggsave("figures/dwl_change_by_sign_annualMedians.png", width = 8, height = 8, units = 'in')
+
+
+
+##SEASONAL MEDIAN
+yearZero <-
+  color_normalized %>%
+    mutate(month=month(date_dec)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      )) %>%
+  filter(season=="JAS") %>%
+  group_by(nhdplusv2_comid, season, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  # filter(year_norm == 0) %>% #year zero
+  filter(year_norm > -10 & year_norm < 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm)) %>%
+    mutate(sign=factor(sign,
+                     levels=c("positive","negative"),
+                     labels=c("greener","bluer"))) 
+
+color_normalized  %>%
+  mutate(month=month(date_dec)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      ),
+    season = factor(season, 
+                    levels=c("OND","JFM","AMJ","JAS"),
+                    labels=c("October-December",
+                             "January-March",
+                             "April-June",
+                             "July-September"))) %>%
+  filter(season=="July-September")%>%
+    mutate(sign=factor(sign,
+                     levels=c("positive","negative"),
+                     labels=c("greener","bluer"))) %>%
+#!!!!!!!THINK ABOUT ADJUSTING FOR WATER YEAR LATER
+  #   water_year = ifelse(
+  #     season %in% c("OND", "JFM") &
+  #       month %in% c("10", "11", "12", "1", "2", "3", "4"),
+  #     year - 1,
+  #     year
+  #   )
+  # )               
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  group_by(nhdplusv2_comid,year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero, color="black") +
+  geom_boxplot(size=0.5, width=0.5, color="black") +
+  facet_wrap(sign~.,
+             ncol=4) + 
+  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
+       x="Years since fire") 
+    ##DARK THEME
+      # theme(
+      #   axis.ticks.y=element_line(color="white"),
+      #   axis.ticks.x=element_line(color="white"),
+      #   axis.line =element_line(color="white"),
+      #   axis.text.x=element_text(size=16,color="white"),
+      #   axis.text.y=element_text(size=18,color="white"),
+      #   axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+      #   axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+      #   panel.border = element_rect(color="black"),
+      #   panel.background= element_rect(fill="black"),
+      #   plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+      #   panel.grid.major = element_blank(),
+      #   panel.grid.minor = element_blank(),
+      #   plot.background = element_rect(fill="#000000",color="black"),
+      #   strip.background = element_rect(fill="black"),
+      #   legend.position ="none"
+      #   )
+ggsave("figures/JASM/dwl_change_by_sign_summerMedians.png", width = 12, height = 6, units = 'in')
+
+
+
+```
+
+#### Visualized burned lakes (w/o sudden chngpt)
+```{r}
+
+color_normalized_alt<-
+  
+  colorModtoSevereBurn_trim %>%
+  as_tibble() %>%
+  ungroup() %>%
+  arrange(date) %>%
+  group_by(year, month, nhdplusv2_comid) %>%
+  distinct(date, .keep_all = TRUE) %>%
+  summarize(median = median(dWL, na.rm = TRUE)) %>%
+  na.trim() %>%
+  ungroup() %>%
+  group_by(nhdplusv2_comid) %>%
+  transmute(date = ymd(paste(year, month, "01", sep = "-")),
+            dWL = median) %>%
+  mutate(yearmonth = yearmonth(date)) %>% #need to index by yearmonth
+  as_tsibble(., key = nhdplusv2_comid, index = yearmonth) %>% #time series tibble
+  fill_gaps() %>% #makes the missing data implicit
+  select(-date) %>%
+  mutate(date = as.Date(yearmonth)) %>%
+  as_tibble() %>%
+  select(-yearmonth) %>%
+    full_join(MTBS_moderate %>%
+              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") %>%
+  mutate(yearBurn = as.numeric(as.character(yearBurn))) %>%
+  mutate(year=year(date)) %>%
   group_by(nhdplusv2_comid) %>%
   filter(year >= yearBurn-10  & year <= yearBurn+10) %>%
   group_by(nhdplusv2_comid) %>%
@@ -2685,25 +3590,194 @@ color_noramlized_alt <-nested_beast %>%
                                year == yearBurn + 8 ~ 8,
                                year == yearBurn + 9 ~ 9,
                                year == yearBurn + 10 ~ 10)) %>%
+  mutate(pre_post_fire = case_when(year_norm >= -10 & year_norm < 0 ~ "pre",
+                                   year_norm > 0 & year_norm <= 5 ~"post")) %>%
   group_by(nhdplusv2_comid) %>%
-  mutate(year_norm = as.factor(as.numeric(year_norm)),
-         fire_period = case_when(year < 0, "before",
-                                 year > 0, "after"))
+  mutate(dwl_norm = scale(dWL))
+
+##ALL DATA
+#Extract the pre-fire and post-fire median dWL
+sign <-
+  color_normalized_alt %>%
+  ungroup() %>%
+  filter(pre_post_fire %in% c("pre","post")) %>% #year zero
+  group_by(nhdplusv2_comid, pre_post_fire) %>%
+  summarize(dwl_norm=median(dwl_norm, na.rm=TRUE))%>%
+  pivot_wider(names_from=pre_post_fire, values_from=dwl_norm) %>%
+  mutate(sign=case_when(post > pre ~ "greener",
+                        pre > post ~ "bluer",
+                        TRUE ~ "no change")) 
+
+# add back to color_normalized_alt
+color_normalized_alt <- left_join(color_normalized_alt, sign, by="nhdplusv2_comid")
+
+#Extract the median normalized color at year zero
+yearZero <-
+  color_normalized_alt %>%
+  ungroup() %>%
+  filter(sign %in% c("greener","bluer")) %>%
+  filter(year_norm > -10 & year_norm < 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_norm=median(dwl_norm, na.rm=TRUE))
+
+color_normalized_alt %>%
+  select(nhdplusv2_comid, sign) %>%
+  distinct(nhdplusv2_comid, sign) %>%
+  group_by(sign) %>%
+  tally()
+
+
+#PLOT with 3 possible responses 
+color_normalized_alt  %>%
+  ggplot(aes(x=year_norm,y=dwl_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_norm, linetype = sign), yearZero, color="white") +
+  # geom_violin(size=0.5, width=0.5, color="white") +
+  geom_boxplot(size=0.5, width=0.5, color="white") +
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#1f78b4','#33a02c',"grey50"))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
+       x="Years since fire") +
+    ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white"),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        panel.border = element_rect(color="black"),
+        panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="black"),
+        legend.position ="none"
+        )
+
+ggsave("figures/JASM/dwl_change_by_sign_allObs_allLakes.png", width = 12, height = 6, units = 'in')
+
+
+##SEASONAL MEDIAN
+## ALL SITES, even those without sudden changepoints
+yearZero <-
+  color_normalized_alt %>%
+  mutate(month=month(date)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      )) %>%
+  filter(season=="JAS") %>%
+  group_by(nhdplusv2_comid, season, year_norm, sign) %>%
+  summarize(dwl_norm = median(dwl_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  filter(year_norm > -10 & year_norm < 0) %>%
+  filter(sign %in% c("greener","bluer")) %>%
+  group_by(sign) %>%
+  summarize(dwl_norm=median(dwl_norm, na.rm=TRUE)) %>%
+    mutate(sign=factor(sign,
+                     # labels=c("bluer","greener"),
+                     levels=c("greener","bluer")))
+
+color_normalized_alt %>%
+  select(nhdplusv2_comid, sign) %>%
+  distinct(nhdplusv2_comid, sign) %>%
+  group_by(sign) %>%
+  tally()
+
+
+color_normalized_alt  %>%
+  mutate(month=month(date)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      ),
+    season = factor(season, 
+                    levels=c("OND","JFM","AMJ","JAS"),
+                    labels=c("October-December",
+                             "January-March",
+                             "April-June",
+                             "July-September"))) %>%
+  filter(season=="July-September")%>%
+  group_by(nhdplusv2_comid,year_norm, sign) %>%
+  summarize(dwl_norm = median(dwl_norm, na.rm=TRUE)) %>%
+  filter(sign %in% c("greener","bluer")) %>%
+  mutate(sign=factor(sign,
+                     # labels=c("bluer","greener"),
+                     levels=c("greener","bluer")))%>%
+  ggplot(aes(x=year_norm,y=dwl_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_norm, linetype = sign), yearZero, color="white") +
+  geom_boxplot(size=0.5, width=0.5, color="white") +
+  facet_wrap(sign~.,
+             ncol=4) + 
+  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
+       x="Years since fire") +
+    ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white"),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        panel.border = element_rect(color="black"),
+        panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="black"),
+        legend.position ="none"
+        )
+ggsave("figures/JASM/dwl_change_by_sign_summerMedians_allLakes.png", width = 12, height = 6, units = 'in')
+
+
+
 ```
 
-#### Visualized burned lakes (neg & pos responses)
+
+##### New standardization
 ```{r}
 
 ##ALL DATA
 #Extract the median normalized color at year zero
 yearZero <-
-  color_normalized %>%
+  color_normalized_alt %>%
   ungroup() %>%
-  filter(year_norm == 0) %>%
+  filter(year_norm <  0) %>%
   group_by(sign) %>%
   summarize(dwl_pred_norm=median(dwl_pred_norm)) 
   # pull()
-color_normalized  %>%
+color_normalized_alt  %>%
   # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
   ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
   geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero) +
@@ -2711,7 +3785,7 @@ color_normalized  %>%
   facet_wrap(~sign) + 
   scale_fill_manual(values=c('#1f78b4','#33a02c'))+
     scale_x_continuous(breaks=seq(-10,10,1))+
-  labs(y="All dwl datapoints (normalized by lake)",
+  labs(y=expression(Delta ~ "dWL (relative to 10-year pre-fire period)"),
        x="Years since fire",
        title="All datapoints") +
   theme(axis.text.x = element_text(
@@ -2719,22 +3793,24 @@ color_normalized  %>%
         hjust = 1,
         size = 8
       ),
+      axis.title.y = element_text(size=12),
       legend.position="none",
       plot.background = element_rect(fill="white"))
 ggsave("figures/dwl_change_by_sign_allData.png", width = 8, height = 8, units = 'in')
 
-##ANNUAL MEDIAN
+
+##ANNUAL MEDIAN - new way of standardizing the data
 #Extract the median normalized color at year zero
 yearZero <-
-  color_normalized %>%
+  color_normalized_alt %>%
   group_by(nhdplusv2_comid, year_norm, sign) %>%
   summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
   ungroup()%>%
-  filter(year_norm == 0) %>%
-    group_by(sign) %>%
-  summarize(dwl_pred_norm=median(dwl_pred_norm)) 
+  filter(year_norm < 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm))
   # pull()
-color_normalized  %>%
+color_normalized_alt  %>%
   # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
   group_by(nhdplusv2_comid, year_norm, sign) %>%
   summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
@@ -2744,14 +3820,17 @@ color_normalized  %>%
   facet_wrap(~sign) + 
   scale_fill_manual(values=c('#1f78b4','#33a02c'))+
   scale_x_continuous(breaks=seq(-10,10,1))+
-  labs(y="Annual median dwl (normalized by lake)",
+  labs(
+    # y="Annual median dwl (normalized by lake)",
        x="Years since fire",
+       y=expression(Delta ~ "dWL (relative to 10-year pre-fire period)"),
        title="Annual median")+
   theme(axis.text.x = element_text(
         angle = 0,
         hjust = 1,
         size = 8
       ),
+      axis.title.y = element_text(size=12),
       legend.position="none",
       plot.background = element_rect(fill="white"))
 ggsave("figures/dwl_change_by_sign_annualMedians.png", width = 8, height = 8, units = 'in')
@@ -2759,7 +3838,7 @@ ggsave("figures/dwl_change_by_sign_annualMedians.png", width = 8, height = 8, un
 
 ##SEASONAL MEDIAN
 yearZero <-
-  color_normalized %>%
+  color_normalized_alt %>%
     mutate(month=month(date_dec)) %>%
   mutate(
     season =
@@ -2780,11 +3859,11 @@ yearZero <-
   group_by(nhdplusv2_comid, season, year_norm, sign) %>%
   summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
   ungroup()%>%
-  filter(year_norm == 0) %>%
+  filter(year_norm<0) %>%
     group_by(sign) %>%
   summarize(dwl_pred_norm=median(dwl_pred_norm)) 
 
-color_normalized  %>%
+color_normalized_alt  %>%
   mutate(month=month(date_dec)) %>%
   mutate(
     season =
@@ -2826,7 +3905,7 @@ color_normalized  %>%
              ncol=4) + 
   scale_fill_manual(values=c('#1f78b4','#33a02c'))+
   scale_x_continuous(breaks=seq(-10,10,1))+
-  labs(y="Annual median dwl (normalized by lake)",
+  labs(y=expression(Delta ~ "dWL (relative to 10-year pre-fire period)"),
        x="Years since fire",
        title="Seasonal medians")+
   theme(axis.text.x = element_text(
@@ -2834,11 +3913,10 @@ color_normalized  %>%
         hjust = 1,
         size = 8
       ),
+      axis.title.y = element_text(size=12),
       legend.position="none",
       plot.background = element_rect(fill="white"))
 ggsave("figures/dwl_change_by_sign_seasonalMedians.png", width = 11, height = 8.5, units = 'in')
-
-
 
 ```
 
@@ -3078,6 +4156,202 @@ full_join(slope, sign) %>%
 # These values are equivelent (cpAbruptChange, pos_cpAbruptChange, neg_cpAbruptChange) but are different from dec_cpAbruptChange and inc_cpAbruptChange
 ```
 
+
+### Wyoming lakes 
+
+```{r}
+
+WY_lakes <- fire_trend_changes_over5 %>%
+  left_join(., lakeIDs %>% select(nhdplusv2_comid, lake_namelagos, lake_lat_decdeg, lake_lon_decdeg,
+                                  lake_centroidstate)) %>%
+  filter(lake_centroidstate=="WY" & fire_cp=="fire change")
+
+WY_lake_names <- WY_lakes %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(row_number()==1) %>% #pick first observations
+  select(nhdplusv2_comid, lake_namelagos)
+
+
+  
+### ALL Wyoming lakes
+  fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% WY_lake_names$nhdplusv2_comid) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% WY_lake_names$nhdplusv2_comid)) %>%
+    mutate(dWL=round(dWL,digits=0))%>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+  mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    #Show only the most relevant changepoints, so it's not as distracting
+  filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_low < yearBurn + years(5)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+  geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% WY_lake_names$nhdplusv2_comid) %>%
+      mutate(year=year(date_dec)),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% WY_lake_names$nhdplusv2_comid) %>%
+      mutate(year=year(date_dec)) ,
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_fill_identity() +
+    #Raw data
+    geom_point(aes(fill=color),color="black",shape=21)+
+    facet_wrap(~nhdplusv2_comid, scale="free_y",ncol=4)+
+ scale_x_date(
+   date_breaks = "6 years", date_labels = "%Y",
+              limits = c(as.Date("1984-1-1"), as.Date("2020-12-01")))+
+  # labs(title="Theodore Roosevelt Lake (Reservoir); Arizona, near Pheonix,
+  #      Thermalito Forebay (Reservoir), California,
+  #      Lake Isabella (Reservoir), California")+
+  ##DARK THEME
+      # theme(
+      #   axis.ticks.y=element_line(color="white"),
+      #   axis.ticks.x=element_line(color="white"),
+      #   axis.line =element_line(color="white"),
+      #   axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+      #   axis.text.y=element_text(size=18,color="white"),
+      #   axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+      #   axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+      #   # panel.border = element_rect(color="white"),
+      #   # panel.background= element_rect(fill="black"),
+      #   plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+      #   panel.grid.major = element_blank(),
+      #   panel.grid.minor = element_blank(),
+      #   plot.background = element_rect(fill="#000000",color="black"),
+      #   strip.background = element_rect(fill="#000000"),
+      #   strip.text = element_text(color="#FFFFFF"))+
+  labs(y="Dominant wavelength",
+       x="Year")
+
+
+  
+##Just 2966416, Riddle Lake
+  
+  fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% c("2966416")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("2966416"))) %>%
+    mutate(dWL=round(dWL,digits=0))%>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  left_join(WY_lake_names) %>%
+  mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+  mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    #Show only the most relevant changepoints, so it's not as distracting
+  filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_low < yearBurn + years(5)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+  geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("2966416")) %>%
+      mutate(year=year(date_dec)),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("2966416")) %>%
+      mutate(year=year(date_dec)) ,
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_fill_identity() +
+    #Raw data
+    geom_point(aes(fill=color),color="black",shape=21)+
+    facet_wrap(~lake_namelagos, scale="free_y",ncol=4)+
+ scale_x_date(
+   date_breaks = "6 years", date_labels = "%Y",
+              limits = c(as.Date("1984-1-1"), as.Date("2020-12-01")))+
+      ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        panel.border = element_rect(color="white"),
+        panel.background= element_rect(fill="white"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000")
+        # strip.text = element_text(color="#FFFFFF"),
+        )+
+  labs(y="Dominant wavelength",
+       x="Year")
+
+```
 
 ### Why do lakes change?
 
@@ -4674,6 +5948,880 @@ Ahh, seeing the full timeseries with all the changepoints and their confidence i
 ## Conclusion
 
 I don't think we want to use a truncated timeserise. Although there is overlap in some lakes, it seems like the answers are different enough and the truncated timeseries analysis a little **too** sensitive to picking up changes post-fire. 
+
+
+# Examples for JASM talk
+## Reservoirs
+```{r}
+
+
+  fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% c("120052904","10904119","22670080")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("120052904","10904119","22670080"))) %>%
+    mutate(dWL=round(dWL,digits=0))%>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+  mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+  mutate(year=year(tcp_Date))%>%
+    #Show only the most relevant changepoints, so it's not as distracting
+  filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_high < yearBurn +years(5)) %>%
+  left_join(lakeIDs %>% select(nhdplusv2_comid, lake_namelagos)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+  geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("120052904","10904119","22670080")) %>%
+      mutate(year=year(date_dec)),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("120052904","10904119","22670080")) %>%
+      mutate(year=year(date_dec)) ,
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_fill_identity() +
+    #Raw data
+    geom_point(aes(fill=color),color="black",shape=21)+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")+
+ scale_x_date(
+   date_breaks = "6 years", date_labels = "%Y",
+              limits = c(as.Date("1984-1-1"), as.Date("2020-12-01")))+
+  # labs(title="Theodore Roosevelt Lake (Reservoir); Arizona, near Pheonix,
+  #      Hagerman Reservoir, WY,
+  #      Lake Isabella (Reservoir), California")+
+  ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        # panel.border = element_rect(color="white"),
+        panel.background= element_rect(fill="white"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000")
+        # strip.text = element_text(color="#FFFFFF")
+        )+
+  labs(y="Dominant wavelength",
+       x="Year")
+
+
+ggsave("figures/JASM/Reservoir_examples.jpg", width = 9, height = 4, units = 'in')
+
+
+#Willow lake (reservoir) & Hagerman Reservoir (WY)
+  fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% c("23661584","10904119")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("23661584","10904119"))) %>%
+    mutate(dWL=round(dWL,digits=0))%>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+  mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+  mutate(year=year(tcp_Date))%>%
+    #Show only the most relevant changepoints, so it's not as distracting
+  filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_high < yearBurn +years(5)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+  geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("23661584","10904119")) %>%
+      mutate(year=year(date_dec)),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("23661584","10904119")) %>%
+      mutate(year=year(date_dec)) ,
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_fill_identity() +
+    #Raw data
+    geom_point(aes(fill=color),color="black",shape=21)+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")+
+ scale_x_date(
+   date_breaks = "6 years", date_labels = "%Y",
+              limits = c(as.Date("1984-1-1"), as.Date("2020-12-01")))+
+  # labs(title="Theodore Roosevelt Lake (Reservoir); Arizona, near Pheonix,
+  #      Thermalito Forebay (Reservoir), California,
+  #      Lake Isabella (Reservoir), California")+
+  ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        # panel.border = element_rect(color="white"),
+        panel.background= element_rect(fill="white"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000")
+        # strip.text = element_text(color="#FFFFFF")
+        )+
+  labs(y="Dominant wavelength",
+       x="Year")
+ggsave("figures/JASM/Reservoir_WillowOR_HagermanWY.jpg", width = 8, height = 4, units = 'in')
+```
+
+## Lakes that get green & recover
+```{r}
+
+
+
+  fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% c("2966416","22954221","17573833")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("2966416","22954221","17573833"))) %>%
+    mutate(dWL=round(dWL,digits=0))%>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+  mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+    #Show only the most relevant changepoints, so it's not as distracting
+  filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_low < yearBurn + years(5)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+  geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("2966416","22954221","17573833")) %>%
+      mutate(year=year(date_dec)),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("2966416","22954221","17573833")) %>%
+      mutate(year=year(date_dec)) ,
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_fill_identity() +
+    #Raw data
+    geom_point(aes(fill=color),color="black",shape=21)+
+    facet_wrap(~nhdplusv2_comid, scale="free_x",ncol=4)+
+ scale_x_date(
+   date_breaks = "6 years", date_labels = "%Y",
+              limits = c(as.Date("1984-1-1"), as.Date("2020-12-01")))+
+  # labs(title="Theodore Roosevelt Lake (Reservoir); Arizona, near Pheonix,
+  #      Thermalito Forebay (Reservoir), California,
+  #      Lake Isabella (Reservoir), California")+
+  ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        # panel.border = element_rect(color="white"),
+        panel.background= element_rect(fill="white"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000")
+        # strip.text = element_text(color="#FFFFFF")
+        )+
+  labs(y="Dominant wavelength",
+       x="Year")
+
+
+ggsave("figures/JASM/Greener_but_recover_examples.jpg", width = 9, height = 4, units = 'in')
+
+```
+
+## Lakes that get green & stay green
+
+```{r}
+#Big lake, AZ and Dog Lake, OR
+  fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% c("20493267","7914969")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("20493267","7914969"))) %>%
+    mutate(dWL=round(dWL,digits=0))%>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+  mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+  mutate(year=year(tcp_Date))%>%
+    #Show only the most relevant changepoints, so it's not as distracting
+  filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_high < yearBurn +years(5)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+  geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("20493267","7914969")) %>%
+      mutate(year=year(date_dec)),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("20493267","7914969")) %>%
+      mutate(year=year(date_dec)) ,
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_fill_identity() +
+    #Raw data
+    geom_point(aes(fill=color),color="black",shape=21)+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")+
+ scale_x_date(
+   date_breaks = "6 years", date_labels = "%Y",
+              limits = c(as.Date("1984-1-1"), as.Date("2020-12-01")))+
+  # labs(title="Theodore Roosevelt Lake (Reservoir); Arizona, near Pheonix,
+  #      Thermalito Forebay (Reservoir), California,
+  #      Lake Isabella (Reservoir), California")+
+  ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        # panel.border = element_rect(color="white"),
+        # panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000"),
+        strip.text = element_text(color="#FFFFFF"))+
+  labs(y="Dominant wavelength",
+       x="Year")
+
+ggsave("figures/JASM/BigLake_AZ_DogLake_OR.jpg", width = 7, height = 4, units = 'in')
+
+
+
+
+  fire_trend_changes_over5 %>%
+    filter(nhdplusv2_comid %in% c("7914969")) %>%
+    left_join(
+      .,
+      nested_beast %>%
+        select(nhdplusv2_comid, data) %>%
+        unnest(c(data)) %>%
+        filter(nhdplusv2_comid %in% c("7914969"))) %>%
+    mutate(dWL=round(dWL,digits=0))%>%
+  left_join(fui.lookup) %>%
+  left_join(fui.colors) %>%
+  mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
+  mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
+  mutate(year=year(tcp_Date))%>%
+    #Show only the most relevant changepoints, so it's not as distracting
+  filter(tcp_Date >= yearBurn - years(1)) %>%
+  filter(tcp_CI_high < yearBurn +years(5)) %>%
+    ggplot(aes(y = dWL, x = date)) +
+    geom_rect(
+      aes(
+        xmin = as.Date(tcp_CI_low),
+        xmax = as.Date(tcp_CI_high),
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      color = "pink",
+      fill = "pink"
+    )+
+  #Add vertical line for year of burn
+  geom_vline(aes(xintercept = yearBurn),
+             color = "red",
+             size = 0.5) +
+    #Add vertical line for exact trend changepoint
+  geom_vline(aes(xintercept = as.Date(tcp_Date)),
+               linetype = "dashed",
+               size = 0.5) +
+      #Add confidence intervals around the dwl trend
+  geom_ribbon(data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("7914969")) %>%
+      mutate(year=year(date_dec)),
+      aes(
+    ymin = (dWL_pred_CI_low),
+    ymax = (dWL_pred_CI_high),
+    x = as.Date(date_dec)
+  ),
+  inherit.aes = FALSE,
+  fill = "grey50") +
+    #Add line for predicted dwl trend
+  geom_line(
+    data = nested_beast %>%
+      select(nhdplusv2_comid, pred_tcps) %>%
+      unnest(c(pred_tcps)) %>%
+      filter(nhdplusv2_comid %in% c("7914969")) %>%
+      mutate(year=year(date_dec)) ,
+    aes(x = as.Date(date_dec), y = dWL_pred)
+  ) +
+    scale_fill_identity() +
+    #Raw data
+    geom_point(aes(fill=color),color="black",shape=21)+
+    facet_wrap(~nhdplusv2_comid, scale="free_x")+
+ scale_x_date(
+   date_breaks = "6 years", date_labels = "%Y",
+              limits = c(as.Date("1984-1-1"), as.Date("2020-12-01")))+
+  # labs(title="Theodore Roosevelt Lake (Reservoir); Arizona, near Pheonix,
+  #      Thermalito Forebay (Reservoir), California,
+  #      Lake Isabella (Reservoir), California")+
+  ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        # panel.border = element_rect(color="white"),
+        # panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000")
+        # strip.text = element_text(color="#FFFFFF")
+        )+
+  labs(y="Dominant wavelength",
+       x="Year")
+```
+
+## Number of chgpts by burn severity class
+
+```{r}
+
+BurnClassCount<-fire_trend_changes_over5 %>%
+  full_join(
+    ., MTBS_moderate %>% mutate(yearBurn=as.numeric(as.character(yearBurn)))
+  ) %>% 
+    filter(nhdplusv2_comid %in% colorModtoSevereBurn_trim$nhdplusv2_comid) %>%
+  group_by(nhdplusv2_comid)  %>%
+  # slice(which.max(value)) %>% # We have duplicate rows of observations and this picks just the year of the burn
+  mutate(burnSeverityClass = cut(value, breaks = c(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+                                 labels = c("5-10%","10-20%","20-30%","30-40%","40-50%","50-60%",
+                                            "60-70%","70-80%","80-90%","90-100%"),
+                                 ordered_result = TRUE)) %>%
+  group_by(nhdplusv2_comid, burnSeverityClass, fire_cp) %>%
+  summarize(n=n()) %>%
+  pivot_wider(names_from = fire_cp,
+              values_from = n) %>%
+  mutate(`fire change`=replace_na(`fire change`, 0)) %>%# Replace NAs to zeros
+  mutate(firechange =
+           ifelse(`fire change` >= 1, "yes",
+                  ifelse(`fire change` < 1, "no", "error"))) %>%
+  mutate(firechange=factor(firechange,
+                           levels=c("no","yes")))%>%
+  group_by(burnSeverityClass) %>%
+  add_count(name="n_per_burnClass") 
+
+
+#Dummy data for no burn sites -- I have this analysis below but it takes long to run.
+#The "false positive rate" is 11%
+length(unique(colorNoBurn$nhdplusv2_comid))
+burnSeverityClass <- c("No burn","No burn")
+firechange <- c("yes","no")
+prop_change <- c(0.11,0.89)
+noBurnCount<-data.frame(burnSeverityClass,
+                        firechange,
+                        prop_change) %>%
+  mutate(firechange=factor(firechange,
+                           levels=c("no","yes")))
+
+
+# Stacked barplot with proportions
+BurnClassCount %>%
+  group_by(burnSeverityClass, firechange, n_per_burnClass) %>%
+  summarize(n_lakes_changed=length(unique(nhdplusv2_comid))) %>%
+  mutate(prop_change=n_lakes_changed/n_per_burnClass) %>%
+    # bind_rows(.,noBurnCount) %>%
+  ggplot(aes(fill = firechange, y = prop_change, x = burnSeverityClass)) +
+  geom_bar(color="black", position = "fill", stat = "identity") +
+  scale_fill_manual(values = c("#0a2463","#fb3640"),
+                    labels = c("No response","Change in dWL detected"),
+                    name = "")+
+  labs(x="Burn severity class (% of local catchment)",
+       y="Proportion of lakes")+
+  geom_hline(yintercept=0.5, color="black", linetype="dashed", size=0.5)  +
+
+# Barplots with counts
+BurnClassCount %>%
+  group_by(burnSeverityClass, firechange, n_per_burnClass) %>%
+  summarize(n_lakes_changed=length(unique(nhdplusv2_comid))) %>%
+  ggplot(aes(fill = firechange, y = n_lakes_changed, x = burnSeverityClass)) +
+  geom_bar(color="black", position = "dodge", stat = "identity") +
+  scale_fill_manual(values = c("#0a2463","#fb3640"),
+                    labels = c("No response","Change in dWL detected"),
+                    name = "")+
+  labs(x="Burn severity class (% of local catchment)",
+       y="Number of lakes")+
+  plot_layout(guides = 'collect') &   ##DARK THEME
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_blank(),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        # panel.border = element_rect(color="white"),
+        # panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000"),
+        strip.text = element_text(color="#FFFFFF"),
+        legend.position="top",
+        legend.background = element_rect(fill="black"),
+        legend.text = element_text(size=14,color="white",face="bold"))
+
+
+BurnClassCount %>%
+  group_by(firechange) %>%
+  summarize(n_lakes_changed=length(unique(nhdplusv2_comid)))
+
+ggsave("figures/JASM/tcp_by_burnSeverity.jpg", width = 9, height = 4, units = 'in', dpi=600)
+```
+
+
+## Normalized values
+```{r}
+##ANNUAL MEDIAN
+#Extract the median normalized color at year zero
+yearZero <-
+  color_normalized %>%
+  group_by(nhdplusv2_comid, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  filter(year_norm == 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm)) %>%
+  mutate(sign=factor(sign,
+                     levels=c("positive","negative")))
+  # pull()
+color_normalized  %>%
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  group_by(nhdplusv2_comid, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  mutate(sign=factor(sign,
+                     levels=c("positive","negative")))%>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm), yearZero, color="white", linetype="dashed") +
+  geom_boxplot(size=0.2, width=0.5, color="white") +
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y="Annual median dwl (normalized by lake)",
+       x="Years since fire",
+       title="Annual median")+
+  theme_few()+
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white"),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        panel.border = element_rect(color="white"),
+        panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000"),
+        strip.text = element_text(color="#FFFFFF", size=14, face="bold"),
+        legend.position="none")
+
+ggsave("figures/JASM/dwl_change_by_sign_annualMedians.png", width = 12, height = 6, units = 'in')
+
+
+
+##SEASONAL MEDIAN
+yearZero <-
+  color_normalized %>%
+    mutate(month=month(date_dec)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      )) %>%
+  group_by(nhdplusv2_comid, season, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  filter(year_norm == 0) %>%
+    group_by(sign) %>%
+  summarize(dwl_pred_norm=median(dwl_pred_norm)) 
+
+color_normalized  %>%
+  mutate(month=month(date_dec)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      ),
+    season = factor(season, 
+                    levels=c("OND","JFM","AMJ","JAS"),
+                    labels=c("October-December",
+                             "January-March",
+                             "April-June",
+                             "July-September"))) %>%
+  group_by(nhdplusv2_comid, season,year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  filter(season %in% c("July-September"))%>%
+    mutate(sign=factor(sign,
+                     levels=c("positive","negative")))%>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm), yearZero, color="white", linetype="dashed") +
+  geom_boxplot(size=0.2, width=0.5, color="white") +
+  facet_wrap(sign~.) +
+  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y="Annual median dwl (normalized by lake)",
+       x="Years since fire",
+       title="Summer medians")+
+      ##DARK THEME
+  theme_few()+
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white"),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_text(size=18,hjust=0.5, color="white"),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        panel.border = element_rect(color="white"),
+        panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000"),
+        strip.text = element_text(color="#FFFFFF", size=14, face="bold"),
+        legend.position="none")
+
+ggsave("figures/JASM/dwl_change_by_sign_summerMedians.png", width = 12, height = 6, units = 'in')
+
+
+#How many in each category?
+color_normalized %>%
+  distinct(nhdplusv2_comid, .keep_all=TRUE) %>%
+  group_by(sign) %>%
+  count() %>%
+  pivot_wider(names_from=sign, values_from=n) %>%
+  mutate(total=negative+positive,
+         prop_negative=negative/total,
+         prop_positive=positive/total)
+  
+
+```
+
+##MAPS
+
+```{r}
+## SAME AS ABOVE BUT WHOLE WESTERN U.S. for CU JOB TALK
+load('~/Dropbox/dropbox Research/rocky-mtn-color/data/lakezones.RData')
+
+head(lakezones)
+
+#Look at ALL the lakes in the study region
+lakezones_studyregion <- lakezones %>%
+  select(lagoslakeid, lake_namegnis, lake_centroidstate, lake_elevation_m) %>%
+  inner_join(lakecharacteristics)  %>%
+  inner_join(lagos %>% select(lagoslakeid, lake_lat_decdeg, lake_lon_decdeg)) %>%
+  filter(lake_centroidstate %in% c('CO','UT','WY','MT','NM','ID','NV',
+                                   'CA','WA','OR','AZ')) 
+  # filter(lake_elevation_m >= 1400)
+
+# How many of the lakes are >10 ha in surface area?
+lakezones_studyregion %>%
+  filter(lake_waterarea_ha >= 10) %>%
+  count()
+
+#What proportion of lakes in the regions are small (<10 ha but <4ha) or large (>10 ha)
+lakezones_studyregion <- lakezones_studyregion %>%
+  filter(lake_waterarea_ha >= 4) %>%
+  mutate(
+    size_class = case_when(
+      lake_waterarea_ha <= 4  ~ '≤ 4 ha',
+      lake_waterarea_ha >= 4 &  lake_waterarea_ha < 10 ~ '4-10 ha',
+      TRUE ~ "> 10 ha"
+    )
+  )
+
+# Total number of lakes in the study region
+total_lakes_region<-lakezones_studyregion %>%  
+  count()
+total_lakes_region
+
+#How many small lakes are over 1600 m?
+lakezones_studyregion %>%
+  filter(lake_elevation_m > 1600) %>%
+  group_by(size_class) %>%
+  count()
+
+# Total lakes either small (4-10 ha) or large (> 10 ha) 
+lake_size_proportions<-lakezones_studyregion %>%  
+  group_by(size_class) %>%
+  count()
+lake_size_proportions
+
+
+#Ok, wow. So the proportion of total lakes that are large is:
+lake_size_proportions[1,2]/(total_lakes_region)
+#Alternatively, the proportion of total lakes that are small (4-10) is:
+lake_size_proportions[2,2]/(total_lakes_region)
+
+## Join with MTBS_long to get the categorical variable of whether or not the lake burned
+MTBS_long_new <- MTBS_long %>%
+  mutate(burn_YN= 
+           ifelse(sumBurn > 0 & sumBurn <= 100, "burned",
+                         ifelse(sumBurn <= 0, "unburned", "unburned")))
+
+
+lakezones_studyregion2 <- left_join(lakezones_studyregion, MTBS_long_new %>%
+                                    select(lagoslakeid,nhdplusv2_comid,burn_YN)) %>%
+  distinct(nhdplusv2_comid, .keep_all=TRUE) %>%
+  mutate(burn_YN=replace_na(burn_YN, 'unburned')) %>% # Replace NAs to zeross
+  select(lake_lon_decdeg, lake_lat_decdeg, burn_YN,  size_class) 
+
+
+## How many lakes burned in each size class?
+# Total lakes either small (4-10 ha) or large (> 10 ha) 
+lake_size_proportions_burn<-lakezones_studyregion2 %>%  
+  group_by(size_class,burn_YN) %>%
+  count()
+lake_size_proportions_burn
+
+
+##MAKE MAPS -- first only lakes > 10 ha
+png(filename = 'figures/JASM/burnmap_alllakes.png',
+    width = 6, height = 8, units = 'in', res = 600)
+ggplot() +
+    geom_polygon(
+    data = map_data("state"),
+    aes(x = long, y = lat, group = group),
+    fill = "white",
+    color = "black",
+    size = .5,
+    alpha = 0
+  ) +
+  # geom_tile(data = elevation_data, aes(x = x, y = y, fill = elevation)) +
+  coord_sf(
+    xlim = c(-125.63435,-101.14872),
+    ylim = c(30.77671, 50.16259),
+    expand = FALSE
+  ) + #values from buffer_box
+  # geom_raster(data = hil_df,
+  #             aes(x = x, y = y, alpha = layer), show.legend=FALSE) +
+  # scale_fill_gradientn(colors = terrain.colors(5))+
+  labs(
+    # title="All lakes >1 ha in the WUS region",
+       # subtitle="There are 54,286 lakes total, and only 14% (n=7693) are > 10 ha in size",
+       x = "Longitude", y = "Latitude")+
+  geom_point(
+    data = lakezones_studyregion2 %>% filter(burn_YN=="burned"),
+    aes(lake_lon_decdeg, lake_lat_decdeg, color=size_class),
+    size = 1.2,
+    # color="black",
+    # fill=NA,
+    alpha = 0.5
+  ) +
+  scale_color_manual(
+                    values=c("#022f40","#38aecc"),
+                     name="Lake size:")+
+  # scale_shape_manual(values=c(16,17),
+  #                    name="Lake size")+
+  guides(color = guide_legend(override.aes=list(size=3,alpha=1)),
+         # shape = guide_legend(override.aes=list(size=3,alpha=1)),
+         fill = guide_colourbar(barwidth = 12, barheight = 0.5)) +
+    theme_few()+
+      theme(
+        axis.ticks.y=element_line(color="white"),
+        axis.ticks.x=element_line(color="white"),
+        axis.line =element_line(color="white"),
+        axis.text.x=element_text(size=16,color="white",angle = 45, hjust = 1),
+        axis.text.y=element_text(size=18,color="white"),
+        axis.title.x=element_blank(),
+        axis.title.y=element_text(size=18,hjust=0.5, color="white"),
+        # panel.border = element_rect(color="white"),
+        # panel.background= element_rect(fill="black"),
+        plot.title=element_text(size=18,hjust=0.5, color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill="#000000",color="black"),
+        strip.background = element_rect(fill="#000000"),
+        strip.text = element_text(color="#FFFFFF"),
+        legend.position="bottom",
+        legend.background = element_rect(fill="black"),
+        legend.text = element_text(size=14,color="white",face="bold"))+
+  labs(title="Lakes with watershed burns since 1984")
+  
+  
+dev.off()
+```
 
 
 #!!!!! OLD- DO NOT RUN - ARCHIVE
