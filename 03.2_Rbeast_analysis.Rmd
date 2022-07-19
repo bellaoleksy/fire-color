@@ -266,7 +266,7 @@ write.csv(burned_lakes, file="data_export/burned_lakes_carol.csv", row.names = F
 
 #What if we want to sample a distribution of lakes that didn't burn that matches lakes that did burn...?
 MTBS_allsites <- MTBS_long %>%
-  filter(scale=="Cat") %>%
+  filter(scale=="Ws") %>%
   group_by(nhdplusv2_comid,lake_lon_decdeg,lake_lat_decdeg,lake_waterarea_ha,lake_perimeter_m) %>%
   slice(which.max(value)) %>%
   mutate(burn_type = case_when(value == 0 ~ "unburned",
@@ -315,7 +315,7 @@ MTBS_subset_area %>%
 
 
 length(unique(MTBS_subset_area$nhdplusv2_comid))
-#7410
+#8208
 
 #How many sites do we drop if we specify that the lake has to be 90m on a side?
 # less<-MTBS_subset %>%
@@ -505,9 +505,9 @@ colorModtoSevereBurn_trim <- colorModtoSevereBurn %>%
   ) %>%
   ungroup()
 
-#How many lakes that burned over 1% or 5%
+#How many lakes that burned over 1% 
 length(unique(colorModtoSevereBurn_trim$nhdplusv2_comid))
-
+#467
 
 ```
 We have `r length(unique(colorModtoSevereBurn_trim$nhdplusv2_comid))` lakes to start with this time. 
@@ -551,12 +551,14 @@ nested_beast <- colorModtoSevereBurn_trim %>%
 gc()#Free up memory
 end_time <- Sys.time()
 # save(nested_beast, file="data_export/nested_beast_20220505.RData") #This version is all 275 lakes that burned over 5% watershed area
-save(nested_beast, colorModtoSevereBurn_trim, MTBS_moderate, file="data_export/nested_beast_20220701.RData") #This version is all 314 lakes that burned over 1% watershed area
+# save(nested_beast, colorModtoSevereBurn_trim, MTBS_moderate, file="data_export/nested_beast_20220701.RData") #This version is all 314 lakes that burned over 1% watershed area
+save(nested_beast, colorModtoSevereBurn_trim, MTBS_moderate, file="data_export/nested_beast_20220719.RData") #This version is 467 lakes that burned over 1% watershed area (WS not CAT) and only lakes that burned ONCE during that time
 ```
 
 ```{r}
 # base::load('data_export/nested_beast_20220505.RData') #This version is all 275 lakes that burned over 5% watershed area
-base::load('data_export/nested_beast_20220701.RData') #This version is all 314 lakes that burned over 1% watershed area
+# base::load('data_export/nested_beast_20220701.RData') #This version is all 314 lakes that burned over 1% watershed area
+base::load('data_export/nested_beast_20220719.RData') #This version is 467 lakes that burned over 1% watershed area (WS not CAT) and only lakes that burned ONCE during that time
 ```
 
 
@@ -2157,7 +2159,7 @@ fire_trend_changes_over5 %>%
   theme(legend.position = "none",
         plot.title = element_text(size = 11)) +
   labs(y = "Magnitude of dWL change (nm)",
-       x = "Burn severity class (% of local catchment)")
+       x = "Burn severity class (% of watershed)")
 # ggsave("figures/tcp_magnitude_by_burnSeverity.jpg", width = 6, height = 6, units = 'in', dpi=600)
 ```
 
@@ -2530,68 +2532,6 @@ pred_dwl_change %>%
     facet_wrap(~nhdplusv2_comid, scale="free_x")
 
 
-#A case where cpAbruptChange is positive, but the calculated chnage is zero
-#It turns out the reason for this discrepancy is because the change is very quick (toward green) but the lake seems to recover very quickly too (toward blue)
-  fire_trend_changes_over5 %>%
-    filter(nhdplusv2_comid %in% c("20341411")) %>%
-    left_join(
-      .,
-      nested_beast %>%
-        select(nhdplusv2_comid, data) %>%
-        unnest(c(data)) %>%
-        filter(nhdplusv2_comid %in% c("20341411"))
-    ) %>%
-      mutate(dWL=round(dWL, digits=0))%>%
-    left_join(fui.lookup) %>%
-  left_join(fui.colors) %>%
-    mutate_at(vars(tcp_Date, tcp_CI_low, tcp_CI_high), date_decimal) %>%
-    mutate(yearBurn = as.Date(as.character(yearBurn), format = "%Y")) %>%
-    #Show only the most relevant changepoints, so it's not as distracting
-    filter(tcp_Date >= yearBurn - years(1)) %>%
-  filter(tcp_CI_high < yearBurn +years(5)) %>%
-    ggplot(aes(y = dWL, x = date)) +
-    geom_rect(
-      aes(
-        xmin = as.Date(tcp_CI_low),
-        xmax = as.Date(tcp_CI_high),
-        ymin = -Inf,
-        ymax = Inf
-      ),
-      color = "pink",
-      fill = "pink"
-    )+
-  #Add vertical line for year of burn
-  geom_vline(aes(xintercept = yearBurn),
-             color = "red",
-             size = 0.5) +
-    #Add vertical line for exact trend changepoint
-    geom_vline(aes(xintercept = as.Date(tcp_Date)),
-               linetype = "dashed",
-               size = 0.5) +
-      #Add confidence intervals around the dwl trend
-  geom_ribbon(data = nested_beast %>%
-      select(nhdplusv2_comid, pred_tcps) %>%
-      unnest(c(pred_tcps)) %>%
-      filter(nhdplusv2_comid %in% c("20341411")),
-      aes(
-    ymin = (dWL_pred_CI_low),
-    ymax = (dWL_pred_CI_high),
-    x = as.Date(date_dec)
-  ),
-  inherit.aes = FALSE,
-  fill = "grey50") +
-    #Add line for predicted dwl trend
-  geom_line(
-    data = nested_beast %>%
-      select(nhdplusv2_comid, pred_tcps) %>%
-      unnest(c(pred_tcps)) %>%
-      filter(nhdplusv2_comid %in% c("20341411")),
-    aes(x = as.Date(date_dec), y = dWL_pred)
-  ) +
-    scale_color_identity() +
-    #Raw data
-    geom_point(aes(color=color))+
-    facet_wrap(~nhdplusv2_comid, scale="free_x")
   
 # A case where the model detects a sudden drop but in the manual calculation it looks like the lake got greener  
 fire_trend_changes_over5 %>%
@@ -2860,9 +2800,10 @@ color_normalized  %>%
   scale_fill_manual(values=c('#33a02c','#1f78b4'))+
   scale_x_continuous(breaks=seq(-10,10,1))+
   labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
-       x="Years since fire") 
+       x="Years since fire",
+       title="Method 1 - lakes with tcp") 
 
-ggsave("figures/dwl_change_by_sign_allData.png", width = 12, height = 6, units = 'in')
+ggsave("figures/dwl_change_by_sign_allData_method1.png", width = 12, height = 6, units = 'in')
 
 
 ##SEASONAL MEDIAN
@@ -2935,7 +2876,8 @@ color_normalized  %>%
   scale_fill_manual(values=c('#33a02c','#1f78b4'))+
   scale_x_continuous(breaks=seq(-10,10,1))+
   labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
-       x="Years since fire") 
+       x="Years since fire",
+       title="Method 1 - lakes with tcp") 
 
 ggsave("figures/dwl_change_by_sign_summerMedians_method1.png", width = 12, height = 6, units = 'in')
 
@@ -3034,12 +2976,15 @@ color_normalized_alt %>%
 
 #PLOT with 3 possible responses 
 color_normalized_alt  %>%
+  mutate(sign=factor(sign,
+                     # labels=c("bluer","greener"),
+                     levels=c("greener","bluer","no change")))%>%
   ggplot(aes(x=year_norm,y=dwl_norm, fill=sign, group=year_norm)) +
   geom_hline(aes(yintercept=dwl_norm, linetype = sign), yearZero) +
   # geom_violin(size=0.5, width=0.5, color="white") +
   geom_boxplot(size=0.5, width=0.5) +
   facet_wrap(~sign) + 
-  scale_fill_manual(values=c('#1f78b4','#33a02c',"grey50"))+
+  scale_fill_manual(values=c('#33a02c','#1f78b4',"grey50"))+
   scale_x_continuous(breaks=seq(-10,10,1))+
   labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
        x="Years since fire",
@@ -3075,12 +3020,12 @@ yearZero <-
   summarize(dwl_norm = median(dwl_norm, na.rm=TRUE)) %>%
   ungroup()%>%
   filter(year_norm > -10 & year_norm < 0) %>%
-  filter(sign %in% c("greener","bluer")) %>%
+  filter(sign %in% c("greener","bluer","no change")) %>%
   group_by(sign) %>%
   summarize(dwl_norm=median(dwl_norm, na.rm=TRUE)) %>%
     mutate(sign=factor(sign,
                      # labels=c("bluer","greener"),
-                     levels=c("greener","bluer")))
+                     levels=c("greener","bluer","no change")))
 
 color_normalized_alt %>%
   select(nhdplusv2_comid, sign) %>%
@@ -3116,16 +3061,16 @@ color_normalized_alt  %>%
   filter(season=="July-September")%>%
   group_by(nhdplusv2_comid,year_norm, sign) %>%
   summarize(dwl_norm = median(dwl_norm, na.rm=TRUE)) %>%
-  filter(sign %in% c("greener","bluer")) %>%
+  filter(sign %in% c("greener","bluer","no change")) %>%
   mutate(sign=factor(sign,
                      # labels=c("bluer","greener"),
-                     levels=c("greener","bluer")))%>%
+                     levels=c("greener","bluer","no change")))%>%
   ggplot(aes(x=year_norm,y=dwl_norm, fill=sign, group=year_norm)) +
   geom_hline(aes(yintercept=dwl_norm, linetype = sign), yearZero) +
   geom_boxplot(size=0.5, width=0.5) +
   facet_wrap(sign~.,
              ncol=4) + 
-  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_fill_manual(values=c('#33a02c','#1f78b4','grey50'))+
   scale_x_continuous(breaks=seq(-10,10,1))+
   labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
        x="Years since fire",
@@ -3221,7 +3166,7 @@ color_normalized  %>%
   ylim(-10,10)+
   labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
        x="Years since fire",
-       title="Method 2 - manually calculated z-score") 
+       title="Method 2 - manually calculated z-score - lakes with tcp") 
 
 ggsave("figures/dwl_change_by_sign_allObs_Method2.png", width = 12, height = 6, units = 'in')
 
@@ -3299,7 +3244,7 @@ color_normalized  %>%
   ylim(-10,10)+
   labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
        x="Years since fire",
-       title="Method 2 - manually calculated z-score") 
+       title="Method 2 - manually calculated z-score - lakes with tcp") 
 
 ggsave("figures/dwl_change_by_sign_summerMedians_method2.png", width = 12, height = 6, units = 'in')
 
@@ -3380,13 +3325,16 @@ sign <-
                         TRUE ~ "no change")) 
 
 # add back to color_normalized_alt
-color_normalized_alt <- left_join(color_normalized_alt, sign, by="nhdplusv2_comid")
+color_normalized_alt <- left_join(color_normalized_alt, sign, by="nhdplusv2_comid") %>%
+    mutate(sign=factor(sign,
+                     # labels=c("bluer","greener"),
+                     levels=c("greener","bluer","no change")))
 
 #Extract the mean normalized color prior to year zero
 yearZero <-
   color_normalized_alt %>%
   ungroup() %>%
-  filter(sign %in% c("greener","bluer")) %>%
+  filter(sign %in% c("greener","bluer","no change")) %>%
   filter(year_norm > -10 & year_norm < 0) %>%
   group_by(sign) %>%
   mutate(dwl_norm=(dWL-mean_prefire_dwl)/sd_prefire_dwl) %>%
@@ -3406,7 +3354,7 @@ color_normalized_alt  %>%
   # geom_violin(size=0.5, width=0.5, color="white") +
   geom_boxplot(size=0.5, width=0.5) +
   facet_wrap(~sign) + 
-  scale_fill_manual(values=c('#1f78b4','#33a02c',"grey50"))+
+  scale_fill_manual(values=c('#33a02c','#1f78b4',"grey50"))+
   scale_x_continuous(breaks=seq(-10,10,1))+
   labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
        x="Years since fire",
@@ -3447,7 +3395,7 @@ yearZero <-
   summarize(dwl_norm=median(dwl_norm, na.rm=TRUE)) %>%
   mutate(sign=factor(sign,
                      # labels=c("bluer","greener"),
-                     levels=c("greener","bluer")))
+                     levels=c("greener","bluer","no change")))
 
 color_normalized_alt %>%
   select(nhdplusv2_comid, sign) %>%
@@ -3483,16 +3431,16 @@ color_normalized_alt  %>%
   filter(season=="July-September")%>%
   group_by(nhdplusv2_comid,year_norm, sign) %>%
   summarize(dwl_norm = median(dwl_norm, na.rm=TRUE)) %>%
-  filter(sign %in% c("greener","bluer")) %>%
+  filter(sign %in% c("greener","bluer","no change")) %>%
   mutate(sign=factor(sign,
                      # labels=c("bluer","greener"),
-                     levels=c("greener","bluer")))%>%
+                     levels=c("greener","bluer","no change")))%>%
   ggplot(aes(x=year_norm,y=dwl_norm, fill=sign, group=year_norm)) +
   geom_hline(aes(yintercept=dwl_norm, linetype = sign), yearZero) +
   geom_boxplot(size=0.5, width=0.5) +
   facet_wrap(sign~.,
              ncol=4) + 
-  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_fill_manual(values=c('#33a02c','#1f78b4','grey50'))+
   scale_x_continuous(breaks=seq(-10,10,1))+
   labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
        x="Years since fire",
@@ -3657,10 +3605,13 @@ manual_sign_df %>%
   scale_fill_manual(values=c("grey70",'#1f78b4','#33a02c'))+
   labs(x="Burn severity class (% of local catchment)",
        y="Proportion of lakes",
-       title="Of the lakes that burned over 1% WSA")+
+       title="Of the lakes that burned over 1% WSA - all data",
+       subtitle="Median lake color 5-years pre and post fire. Do lakes get greener or bluer?")+
   geom_text(aes(label= paste0("n=", n_lakes_changed)), color="black", vjust=1.3, position = "fill", stat = "identity", size=3)+
   # geom_text(aes(label= paste0(round(prop_change*100,1),"%")), color="black", vjust=2.5, position = "fill", stat = "identity", size=3)+
   geom_hline(yintercept=0.5, color="black", linetype="dashed", size=0.5) 
+ggsave("figures/5year_pre_post_manual.jpg", width = 9, height = 7, units = 'in')
+
 
 
 # Were the greener/bluer lakes generally reservoirs or natural lakes?
@@ -3801,8 +3752,41 @@ manual_sign_wide%>%
   facet_wrap(time_period~.)
 
 
+manual_sign_wide%>%
+  # bind_rows(.,BurnClassCount_unburned) %>%
+  group_by(burnSeverityClass, time_period, mode, n_per_burnClass) %>%
+  summarize(n_lakes_changed=length(unique(nhdplusv2_comid))) %>%
+  mutate(prop_change=n_lakes_changed/n_per_burnClass) %>%
+  mutate(mode=factor(mode,
+                     levels=c("no change","bluer","greener")))%>%
+  ggplot(aes(fill = mode, y = prop_change, x = time_period)) +
+  geom_point(shape=21)+
+  geom_line()+
+  scale_fill_manual(values=c("grey70",'#1f78b4','#33a02c'))+
+  labs(x="Burn severity class (% of local catchment)",
+       y="Proportion of lakes",
+       title="Of the lakes that burned over 1% WSA")+
+  facet_wrap(burnSeverityClass~.)
+
+
+manual_sign_wide%>%
+  # bind_rows(.,BurnClassCount_unburned) %>%
+  group_by(burnSeverityClass, time_period, mode, n_per_burnClass) %>%
+  summarize(n_lakes_changed=length(unique(nhdplusv2_comid))) %>%
+  mutate(prop_change=n_lakes_changed/n_per_burnClass) %>%
+  mutate(mode=factor(mode,
+                     levels=c("no change","bluer","greener")))%>%
+  ggplot(aes(fill=mode, y=prop_change, x=time_period)) + 
+  geom_bar(position="dodge", stat="identity")+
+  scale_fill_manual(values=c("grey70",'#1f78b4','#33a02c'))+
+  facet_wrap(burnSeverityClass~.)
+
+
+
+
+
 # Were the greener/bluer lakes generally reservoirs or natural lakes?
-manual_sign_df_2 %>%
+manual_sign_df %>%
   filter(lake_rsvr_class %in% c("NL","RSVR"))%>%
   group_by(burnSeverityClass, sign, n_per_lakeClass, lake_rsvr_class) %>%
   summarize(n_lakes_changed=length(unique(nhdplusv2_comid))) %>%
@@ -3819,14 +3803,6 @@ manual_sign_df_2 %>%
   # geom_text(aes(label= paste0(round(prop_change*100,1),"%")), color="black", vjust=2.5, position = "fill", stat = "identity", size=3)+
   geom_hline(yintercept=0.5, color="black", linetype="dashed", size=0.5) +
   facet_wrap(lake_rsvr_class~.)
-
-# What was the magnitude of the change? 
-manual_sign_df_2 %>%
-  filter(sign %in% c("greener","bluer")) %>%
-  ggplot(aes(x=dwl_diff, fill=sign))+
-  geom_histogram(color="black") +
-  facet_wrap(lake_rsvr_class~.)
-
 ```
 
 
