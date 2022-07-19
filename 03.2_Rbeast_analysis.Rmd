@@ -142,25 +142,33 @@ length(unique(srCor_comid_NAfree$nhdplusv2_comid))
 
 MTBS_severe<-MTBS_long %>%
   filter(value>90)%>%
-  filter(scale=="Cat") %>%
+  filter(scale=="Ws") %>%
   dplyr::select(nhdplusv2_comid,lake_waterarea_ha,value,year) %>%
   rename(yearBurn=year) %>%
   group_by(nhdplusv2_comid) %>%
   arrange(yearBurn) %>%
-  slice(which.max(value))  # There are a handful of lakes that burned multiple times; select just the BIGGEST burn which likely has the biggest impact.
+  mutate(n_burns=length(unique(yearBurn)))%>%  #it turns out there are several hundred lakes that burned up to 17 times, likely prescribed burns if I had to guess.
+  filter(n_burns==1) %>% #just pull out lakes that burned ONCE
+  select(-n_burns)
+  # slice(which.max(value))  # There are a handful of lakes that burned multiple times; select just the BIGGEST burn which likely has the biggest impact.
   # filter(row_number()==1) #There are a handful of lakes that burned multiple times; select just the FIRST burn which likely has the biggest impact.
-
-## There will be 329 sites when we add the lakes between 4-10 ha
-
 
 MTBS_moderate<-MTBS_long %>%
   filter(value>=1)%>%
-  filter(scale=="Cat") %>%
+  filter(scale=="Ws") %>%
   dplyr::select(nhdplusv2_comid,lake_waterarea_ha,value,year) %>%
   rename(yearBurn=year) %>%
   group_by(nhdplusv2_comid) %>%
   arrange(yearBurn) %>%
-  slice(which.max(value))  # There are a handful of lakes that burned multiple times; select just the BIGGEST burn which likely has the biggest impact.
+  slice(which.max(value))
+  # group_by(nhdplusv2_comid) %>%
+  # mutate(n_burns=length(unique(yearBurn))) %>% #it turns out there are several hundred lakes that burned up to 17 times, likely prescribed burns if I had to guess.
+  # filter(n_burns==1) %>% #just pull out lakes that burned ONCE
+  # select(-n_burns)
+
+
+
+# There are a handful of lakes that burned multiple times; select just the BIGGEST burn which likely has the biggest impact.
   # filter(row_number()==1) #There are a handful of lakes that burned multiple times; select just the FIRST burn which likely has the biggest impact.
 # length(unique(MTBS_moderate$nhdplusv2_comid))
 
@@ -200,7 +208,7 @@ colorNoBurn<-left_join(MTBS_noburn,srCor_comid_NAfree,by="nhdplusv2_comid") %>%
 
 #https://stackoverflow.com/questions/63326846/sample-from-data-frame-based-on-distribution
 MTBS_allsites <- MTBS_long %>%
-  filter(scale=="Cat") %>%
+  filter(scale=="Ws") %>%
   group_by(nhdplusv2_comid,lake_lon_decdeg,lake_lat_decdeg,lake_waterarea_ha,lake_perimeter_m) %>%
   slice(which.max(value)) %>%
   mutate(burn_type = case_when(value == 0 ~ "unburned",
@@ -240,6 +248,17 @@ save(colorNoBurn, colorNoBurn_subset, file="data_export/noBurn.RData")
 
 # write_feather(colorNoBurn_subset, "data_export/colorNoBurn_subset.feather")
 
+## Export for Carolina for burn severity analysis
+source("scripts/01.0_pullLakeIDsLAGOS.R")
+
+burned_lakes <-
+  MTBS_moderate %>%
+  select(nhdplusv2_comid, yearBurn) %>%
+  inner_join(lakeIDs) %>%
+  select(nhdplusv2_comid, yearBurn, lake_nhdid, lake_reachcode, lake_namegnis, lake_lat_decdeg,
+         lake_lon_decdeg, lake_centroidstate, nhdhr_fdate,
+         nhdhr_gnisid, nhdplusv2_reachcode, lagoslakeid)
+write.csv(burned_lakes, file="data_export/burned_lakes_carol.csv", row.names = FALSE)
 
 ## Export for Xiao and Michael
 
@@ -325,6 +344,8 @@ write.csv(MTBS_subset_export, "data_export/westernUSlakes_greaterthan1ha_unburne
 
 
 ```
+
+
 
 ```{r, eval=FALSE}
 # base::load('fire-color/data_export/rbeast_data.RData')
@@ -2763,7 +2784,7 @@ fire_trend_changes_over5 %>%
 
 ```
 
-# 10 years before/after burn
+# 10 years before/after burn (method 1)
 
 ```{r}
 color_normalized<-nested_beast %>%
@@ -2916,17 +2937,17 @@ color_normalized  %>%
   labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
        x="Years since fire") 
 
-ggsave("figures/dwl_change_by_sign_summerMedians.png", width = 12, height = 6, units = 'in')
+ggsave("figures/dwl_change_by_sign_summerMedians_method1.png", width = 12, height = 6, units = 'in')
 
 
 
 ```
 
+
 #### Visualized all burned lakes (w/o sudden chngpt)
 ```{r}
 
 color_normalized_alt<-
-  
   colorModtoSevereBurn_trim %>%
   as_tibble() %>%
   ungroup() %>%
@@ -3021,10 +3042,11 @@ color_normalized_alt  %>%
   scale_fill_manual(values=c('#1f78b4','#33a02c',"grey50"))+
   scale_x_continuous(breaks=seq(-10,10,1))+
   labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
-       x="Years since fire") +
+       x="Years since fire",
+       title="Method 1 - all lakes") +
   theme(legend.position="none")
 
-ggsave("figures/dwl_change_by_sign_allObs_allLakes.png", width = 12, height = 6, units = 'in')
+ggsave("figures/dwl_change_by_sign_allObs_allLakes_method1.png", width = 12, height = 6, units = 'in')
 
 
 ##SEASONAL MEDIAN
@@ -3106,12 +3128,382 @@ color_normalized_alt  %>%
   scale_fill_manual(values=c('#33a02c','#1f78b4'))+
   scale_x_continuous(breaks=seq(-10,10,1))+
   labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
-       x="Years since fire") 
-ggsave("figures/JASM/dwl_change_by_sign_summerMedians_allLakes.png", width = 12, height = 6, units = 'in')
+       x="Years since fire",
+       title="Method 1 - all lakes") 
+ggsave("figures/dwl_change_by_sign_summerMedians_allLakes_method1.png", width = 12, height = 6, units = 'in')
 
 
 
 ```
+
+
+# 10 years before/after burn (method 2)
+
+```{r}
+color_normalized<-nested_beast %>%
+        select(nhdplusv2_comid, pred_tcps) %>%
+        unnest(c(pred_tcps)) %>%
+        filter(nhdplusv2_comid %in% fire_trend_changes_over5$nhdplusv2_comid) %>%
+  left_join(., fire_trend_changes_over5 %>%
+              ungroup() %>%
+              select(nhdplusv2_comid, yearBurn, fire_cp, sign, tcp_Date) %>%
+              filter(fire_cp == "fire change") %>%
+              group_by(nhdplusv2_comid) %>%
+              arrange(tcp_Date) %>%
+              filter(row_number()==1)) %>%
+  mutate(year=year(date_dec)) %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(year >= yearBurn-10  & year <= yearBurn+10) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(year_norm = case_when(year == yearBurn ~ 0,
+                               year == yearBurn - 1 ~ -1,
+                               year == yearBurn - 2 ~ -2,
+                               year == yearBurn - 3 ~ -3,
+                               year == yearBurn - 4 ~ -4,
+                               year == yearBurn - 5 ~ -5,
+                               year == yearBurn - 6 ~ -6,
+                               year == yearBurn - 7 ~ -7,
+                               year == yearBurn - 8 ~ -8,
+                               year == yearBurn - 9 ~ -9,
+                               year == yearBurn - 10 ~ -10,
+                               year == yearBurn + 1 ~ 1,
+                               year == yearBurn + 2 ~ 2,
+                               year == yearBurn + 3 ~ 3,
+                               year == yearBurn + 4 ~ 4,
+                               year == yearBurn + 5 ~ 5,
+                               year == yearBurn + 6 ~ 6,
+                               year == yearBurn + 7 ~ 7,
+                               year == yearBurn + 8 ~ 8,
+                               year == yearBurn + 9 ~ 9,
+                               year == yearBurn + 10 ~ 10)) %>%
+  ungroup() %>%
+  mutate(timeperiod=case_when(year_norm > -10 & year_norm < 0 ~ "pre",
+                              TRUE~"other")) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(mean_prefire_dwl=mean(dWL_pred[timeperiod=="pre"], na.rm=TRUE),
+         sd_prefire_dwl=sd(dWL_pred[timeperiod=="pre"], na.rm=TRUE),
+         dwl_pred_norm=(dWL_pred-mean_prefire_dwl)/sd_prefire_dwl) 
+
+
+```
+
+#### Visualized burned lakes (neg & pos responses)
+```{r}
+
+
+
+##ALL DATA
+#Extract the median normalized color at year zero
+yearZero <-
+  color_normalized %>%
+  ungroup() %>%
+  # filter(year_norm == 0) %>% #year zero
+  filter(year_norm > -10 & year_norm < 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_pred_norm=mean(dwl_pred_norm))%>%
+  mutate(sign=factor(sign,
+                     levels=c("positive","negative"),
+                     labels=c("greener","bluer"))) 
+  # pull()
+color_normalized  %>%
+  mutate(sign=factor(sign,
+                     levels=c("positive","negative"),
+                     labels=c("greener","bluer"))) %>%
+  # mutate(year_norm = as.factor(as.numeric(year_norm))) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero, color="black") +
+  geom_boxplot(size=0.5, width=0.5, color="black") +
+  geom_smooth()+
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  scale_y_continuous(breaks=seq(-10,10,1))+
+  ylim(-10,10)+
+  labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
+       x="Years since fire",
+       title="Method 2 - manually calculated z-score") 
+
+ggsave("figures/dwl_change_by_sign_allObs_Method2.png", width = 12, height = 6, units = 'in')
+
+
+##SEASONAL MEAN
+yearZero <-
+  color_normalized %>%
+    mutate(month=month(date_dec)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      )) %>%
+  filter(season=="JAS") %>%
+  group_by(nhdplusv2_comid, season, year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  # filter(year_norm == 0) %>% #year zero
+  filter(year_norm > -10 & year_norm < 0) %>%
+  group_by(sign) %>%
+  summarize(dwl_pred_norm=mean(dwl_pred_norm)) %>%
+    mutate(sign=factor(sign,
+                     levels=c("positive","negative"),
+                     labels=c("greener","bluer"))) 
+
+color_normalized  %>%
+  mutate(month=month(date_dec)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      ),
+    season = factor(season, 
+                    levels=c("OND","JFM","AMJ","JAS"),
+                    labels=c("October-December",
+                             "January-March",
+                             "April-June",
+                             "July-September"))) %>%
+  filter(season=="July-September")%>%
+  mutate(sign=factor(sign,
+                     levels=c("positive","negative"),
+                     labels=c("greener","bluer"))) %>%
+  group_by(nhdplusv2_comid,year_norm, sign) %>%
+  summarize(dwl_pred_norm = median(dwl_pred_norm, na.rm=TRUE)) %>%
+  ggplot(aes(x=year_norm,y=dwl_pred_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_pred_norm, linetype = sign), yearZero, color="black") +
+  geom_boxplot(size=0.5, width=0.5, color="black", outlier.shape = NA) +
+  facet_wrap(sign~.,
+             ncol=4) + 
+  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  scale_y_continuous(breaks=seq(-10,10,1))+
+  ylim(-10,10)+
+  labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
+       x="Years since fire",
+       title="Method 2 - manually calculated z-score") 
+
+ggsave("figures/dwl_change_by_sign_summerMedians_method2.png", width = 12, height = 6, units = 'in')
+
+
+
+```
+
+
+#### Visualized all burned lakes (w/o sudden chngpt)
+```{r}
+
+color_normalized_alt<-
+  colorModtoSevereBurn_trim %>%
+  as_tibble() %>%
+  ungroup() %>%
+  arrange(date) %>%
+  group_by(year, month, nhdplusv2_comid) %>%
+  distinct(date, .keep_all = TRUE) %>%
+  summarize(median = median(dWL, na.rm = TRUE)) %>%
+  na.trim() %>%
+  ungroup() %>%
+  group_by(nhdplusv2_comid) %>%
+  transmute(date = ymd(paste(year, month, "01", sep = "-")),
+            dWL = median) %>%
+  mutate(yearmonth = yearmonth(date)) %>% #need to index by yearmonth
+  as_tsibble(., key = nhdplusv2_comid, index = yearmonth) %>% #time series tibble
+  fill_gaps() %>% #makes the missing data implicit
+  select(-date) %>%
+  mutate(date = as.Date(yearmonth)) %>%
+  as_tibble() %>%
+  select(-yearmonth) %>%
+    full_join(MTBS_moderate %>%
+              select(nhdplusv2_comid, yearBurn), by = "nhdplusv2_comid") %>%
+  mutate(yearBurn = as.numeric(as.character(yearBurn))) %>%
+  mutate(year=year(date)) %>%
+  group_by(nhdplusv2_comid) %>%
+  filter(year >= yearBurn-10  & year <= yearBurn+10) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(year_norm = case_when(year == yearBurn ~ 0,
+                               year == yearBurn - 1 ~ -1,
+                               year == yearBurn - 2 ~ -2,
+                               year == yearBurn - 3 ~ -3,
+                               year == yearBurn - 4 ~ -4,
+                               year == yearBurn - 5 ~ -5,
+                               year == yearBurn - 6 ~ -6,
+                               year == yearBurn - 7 ~ -7,
+                               year == yearBurn - 8 ~ -8,
+                               year == yearBurn - 9 ~ -9,
+                               year == yearBurn - 10 ~ -10,
+                               year == yearBurn + 1 ~ 1,
+                               year == yearBurn + 2 ~ 2,
+                               year == yearBurn + 3 ~ 3,
+                               year == yearBurn + 4 ~ 4,
+                               year == yearBurn + 5 ~ 5,
+                               year == yearBurn + 6 ~ 6,
+                               year == yearBurn + 7 ~ 7,
+                               year == yearBurn + 8 ~ 8,
+                               year == yearBurn + 9 ~ 9,
+                               year == yearBurn + 10 ~ 10)) %>%
+  mutate(pre_post_fire = case_when(year_norm >= -10 & year_norm < 0 ~ "pre",
+                                   year_norm > 0 & year_norm <= 5 ~"post")) %>%
+  group_by(nhdplusv2_comid) %>%
+  mutate(mean_prefire_dwl=mean(dWL[pre_post_fire=="pre"], na.rm=TRUE),
+         sd_prefire_dwl=sd(dWL[pre_post_fire=="pre"], na.rm=TRUE),
+         dwl_norm=(dWL-mean_prefire_dwl)/sd_prefire_dwl) 
+
+##ALL DATA
+#Extract the pre-fire and post-fire median dWL
+sign <-
+  color_normalized_alt %>%
+  ungroup() %>%
+  filter(pre_post_fire %in% c("pre","post")) %>% #year zero
+  group_by(nhdplusv2_comid, pre_post_fire) %>%
+  summarize(dwl_norm=median(dWL, na.rm=TRUE))%>%
+  pivot_wider(names_from=pre_post_fire, values_from=dwl_norm) %>%
+  mutate(sign=case_when(post > pre ~ "greener",
+                        pre > post ~ "bluer",
+                        TRUE ~ "no change")) 
+
+# add back to color_normalized_alt
+color_normalized_alt <- left_join(color_normalized_alt, sign, by="nhdplusv2_comid")
+
+#Extract the mean normalized color prior to year zero
+yearZero <-
+  color_normalized_alt %>%
+  ungroup() %>%
+  filter(sign %in% c("greener","bluer")) %>%
+  filter(year_norm > -10 & year_norm < 0) %>%
+  group_by(sign) %>%
+  mutate(dwl_norm=(dWL-mean_prefire_dwl)/sd_prefire_dwl) %>%
+  summarize(dwl_norm=mean(dwl_norm, na.rm=TRUE))
+
+color_normalized_alt %>%
+  select(nhdplusv2_comid, sign) %>%
+  distinct(nhdplusv2_comid, sign) %>%
+  group_by(sign) %>%
+  tally()
+
+
+#PLOT with 3 possible responses 
+color_normalized_alt  %>%
+  ggplot(aes(x=year_norm,y=dwl_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_norm, linetype = sign), yearZero) +
+  # geom_violin(size=0.5, width=0.5, color="white") +
+  geom_boxplot(size=0.5, width=0.5) +
+  facet_wrap(~sign) + 
+  scale_fill_manual(values=c('#1f78b4','#33a02c',"grey50"))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y=expression(Delta ~ "color (relative to 10-year pre-fire period)"),
+       x="Years since fire",
+       title="Method 2 - all lakes") +
+  theme(legend.position="none")
+
+ggsave("figures/dwl_change_by_sign_allObs_allLakes_method2.png", width = 12, height = 6, units = 'in')
+
+
+##SEASONAL MEDIAN
+## ALL SITES, even those without sudden changepoints
+yearZero <-
+  color_normalized_alt %>%
+  mutate(month=month(date)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      )) %>%
+  filter(season=="JAS") %>%
+  group_by(nhdplusv2_comid, season, year_norm, sign) %>%
+  summarize(dwl_norm = median(dwl_norm, na.rm=TRUE)) %>%
+  ungroup()%>%
+  filter(year_norm > -10 & year_norm < 0) %>%
+  filter(sign %in% c("greener","bluer")) %>%
+  group_by(sign) %>%
+  summarize(dwl_norm=median(dwl_norm, na.rm=TRUE)) %>%
+  mutate(sign=factor(sign,
+                     # labels=c("bluer","greener"),
+                     levels=c("greener","bluer")))
+
+color_normalized_alt %>%
+  select(nhdplusv2_comid, sign) %>%
+  distinct(nhdplusv2_comid, sign) %>%
+  group_by(sign) %>%
+  tally()
+
+
+color_normalized_alt  %>%
+  mutate(month=month(date)) %>%
+  mutate(
+    season =
+      ifelse(
+        month %in% c(10, 11, 12),
+        "OND",
+        ifelse(
+          month %in% c(1, 2, 3),
+          "JFM",
+          ifelse(
+            month %in% c(4, 5, 6),
+            "AMJ",
+            ifelse(month %in% c(7, 8, 9),
+                   "JAS", "error")
+          )
+        )
+      ),
+    season = factor(season, 
+                    levels=c("OND","JFM","AMJ","JAS"),
+                    labels=c("October-December",
+                             "January-March",
+                             "April-June",
+                             "July-September"))) %>%
+  filter(season=="July-September")%>%
+  group_by(nhdplusv2_comid,year_norm, sign) %>%
+  summarize(dwl_norm = median(dwl_norm, na.rm=TRUE)) %>%
+  filter(sign %in% c("greener","bluer")) %>%
+  mutate(sign=factor(sign,
+                     # labels=c("bluer","greener"),
+                     levels=c("greener","bluer")))%>%
+  ggplot(aes(x=year_norm,y=dwl_norm, fill=sign, group=year_norm)) +
+  geom_hline(aes(yintercept=dwl_norm, linetype = sign), yearZero) +
+  geom_boxplot(size=0.5, width=0.5) +
+  facet_wrap(sign~.,
+             ncol=4) + 
+  scale_fill_manual(values=c('#33a02c','#1f78b4'))+
+  scale_x_continuous(breaks=seq(-10,10,1))+
+  labs(y=expression(Delta ~ "summer color (relative to 10-year pre-fire period)"),
+       x="Years since fire",
+       title="Method 2 - all lakes") 
+ggsave("figures/dwl_change_by_sign_summerMedians_allLakes_method2.png", width = 12, height = 6, units = 'in')
+
+
+
+```
+
+
 
 #### Proportion green/blue
 ##### Abrupt change lakes
@@ -4000,6 +4392,7 @@ bluer_NL_data %>%
 
 
 ```
+
 
 # .
 # .
